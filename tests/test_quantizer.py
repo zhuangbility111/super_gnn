@@ -1,8 +1,6 @@
-from sqlite3 import Time
-import sys
-sys.path.append("../")
 import torch
 import pytest
+import torch.distributed as dist
 from super_gnn.quantizer import QuantizerForMixedBits
 from super_gnn.communicator import Communicator
 from super_gnn.time_recorder import TimeRecorder
@@ -22,6 +20,8 @@ def test_get_splits_for_comm_quantized_data():
 
     expected_quantized_recv_splits = [4, 0, 9, 6]
     expected_quantized_send_splits = [0, 5, 0, 25]
+
+    print(quantized_recv_splits)
 
     assert quantized_recv_splits == expected_quantized_recv_splits
     assert quantized_send_splits == expected_quantized_send_splits

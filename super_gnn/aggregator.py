@@ -2,14 +2,14 @@ import torch
 import time
 import sys
 import torch.distributed as dist
-from torch_geometric.nn.spmm_kernel import SPMM_forward, SPMM_backward
+# from torch_geometric.nn.spmm_kernel import SPMM_forward, SPMM_backward
+from super_gnn.ops.spmm_kernel import SPMM_forward, SPMM_backward
 
-sys.path.append("../../")
 
-from communicator import Communicator
-from time_recorder import TimeRecorder
-from quantizer import QuantizerForMixedBits, Quantizer_for_all_procs
-from data_manager import DistributedGraph, DistributedGraphForPre
+from super_gnn.communicator import Communicator
+from super_gnn.time_recorder import TimeRecorder
+from super_gnn.quantizer import QuantizerForMixedBits, Quantizer_for_all_procs
+from super_gnn.data_manager import DistributedGraph, DistributedGraphForPre
 from typing import Union
 
 class Aggregator(torch.autograd.Function):
@@ -51,7 +51,7 @@ class Aggregator(torch.autograd.Function):
                 torch.index_select(local_nodes_feat, 0, graph.idx_nodes_send_to_others, out=send_buf)
             
             layer = f"forward{layer}"
-            comm_handle= Communicator.ctx.comm(
+            comm_handle = Communicator.ctx.comm(
                 graph.comm_splits,
                 graph.comm_buf,
                 graph.comm_buf_for_quantization,

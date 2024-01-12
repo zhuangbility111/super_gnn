@@ -11,7 +11,7 @@ from torch_sparse.tensor import SparseTensor
 import scipy.sparse as sci_sp
 import time
 
-from model.ops.spmm_kernel import SPMM_forward, SPMM_backward
+from super_gnn.ops.spmm_kernel import SPMM_forward, SPMM_backward
 
 def check_error(res_ref, res, rows, cols, error):
     total_diff = 0.0

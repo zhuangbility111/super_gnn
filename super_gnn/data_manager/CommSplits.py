@@ -1,8 +1,7 @@
 import torch
 import sys
 
-sys.path.append("../")
-from quantizer import Quantizer_for_all_procs
+from super_gnn.quantizer import Quantizer_for_all_procs
 
 class CommSplits(object):
     def __init__(self, recv_splits: list, send_splits: list, world_size: int, bits: int) -> None:

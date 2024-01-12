@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 import torch.distributed as dist
 import supergnn_ops
-from time_recorder import TimeRecorder
+from super_gnn.time_recorder import TimeRecorder
 
 
 class QuantizerForPureBits(object):

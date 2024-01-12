@@ -12,58 +12,7 @@ from super_gnn.assigner import Assigner
 from super_gnn.time_recorder import TimeRecorder
 
 from super_gnn.quantizer import Quantizer_for_all_procs
-
-
-def collect_acc(model, data):
-    # check accuracy
-    TimeRecorder.ctx.set_is_training(False)
-    model.eval()
-    predict_result = []
-    out = model(data["graph"], data["nodes_features"])
-    for mask in (data["nodes_train_masks"], data["nodes_valid_masks"], data["nodes_test_masks"]):
-        num_correct_samples = (
-            (out[mask].argmax(-1) == data["nodes_labels"][mask]).sum() if mask.size(0) != 0 else 0
-        )
-        num_samples = mask.size(0)
-        predict_result.append(num_correct_samples)
-        predict_result.append(num_samples)
-    predict_result = torch.tensor(predict_result)
-    if dist.get_world_size() > 1:
-        dist.all_reduce(predict_result, op=dist.ReduceOp.SUM)
-
-    train_acc = float(predict_result[0] / predict_result[1])
-    val_acc = float(predict_result[2] / predict_result[3])
-    test_acc = float(predict_result[4] / predict_result[5])
-    TimeRecorder.ctx.set_is_training(True)
-    return train_acc, val_acc, test_acc
-
-
-def print_forward_backward_perf(total_forward_dur, total_backward_dur, total_update_weight_dur, total_training_dur):
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    total_forward_dur = torch.tensor([total_forward_dur])
-    total_backward_dur = torch.tensor([total_backward_dur])
-    total_update_weight_dur = torch.tensor([total_update_weight_dur])
-    ave_total_training_dur = torch.tensor([total_training_dur])
-    max_total_training_dur = torch.tensor([total_training_dur])
-
-    dist.reduce(total_forward_dur, 0, op=dist.ReduceOp.SUM)
-    dist.reduce(total_backward_dur, 0, op=dist.ReduceOp.SUM)
-    dist.reduce(total_update_weight_dur, 0, op=dist.ReduceOp.SUM)
-    dist.reduce(ave_total_training_dur, 0, op=dist.ReduceOp.SUM)
-    dist.reduce(max_total_training_dur, 0, op=dist.ReduceOp.MAX)
-
-    if dist.get_rank() == 0:
-        print("training end.")
-        print("forward_time(ms): {}".format(total_forward_dur[0] / float(world_size) * 1000))
-        print("backward_time(ms): {}".format(total_backward_dur[0] / float(world_size) * 1000))
-        print("update_weight_time(ms): {}".format(total_update_weight_dur[0] / float(world_size) * 1000))
-        print(
-            "total_training_time(average)(ms): {}".format(
-                ave_total_training_dur[0] / float(world_size) * 1000
-            )
-        )
-        print("total_training_time(max)(ms): {}".format(max_total_training_dur[0] * 1000.0))
+from .logger import Logger
 
 
 def train(model, data, optimizer, num_epochs, num_bits):
@@ -95,16 +44,13 @@ def train(model, data, optimizer, num_epochs, num_bits):
         total_update_weight_dur += update_weight_end - update_weight_start
         total_training_dur += update_weight_end - forward_start
 
-        train_acc, val_acc, test_acc = collect_acc(model, data)
-
-        if rank == 0:
-            print(
-                f"Rank: {rank}, World_size: {world_size}, Epoch: {epoch}, Loss: {loss}, Train: {train_acc:.4f}, Val: {val_acc:.4f}, Test: {test_acc:.4f}, Time: {(update_weight_end - forward_start):.6f}"
-            )
+        Logger.ctx.print_acc_and_perf(model, data, epoch, loss, update_weight_end - forward_start)
+        
         TimeRecorder.ctx.record_total_training_time(update_weight_end - forward_start)
         TimeRecorder.ctx.next_epoch()
+    
+    Logger.ctx.print_forward_backward_perf(total_forward_dur, total_backward_dur, total_update_weight_dur, total_training_dur)
 
-    print_forward_backward_perf(total_forward_dur, total_backward_dur, total_update_weight_dur, total_training_dur)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -147,6 +93,8 @@ if __name__ == "__main__":
         data["graph"].comm_buf.send_buf.size(0),
         data["graph"].comm_buf.recv_buf.size(0),
     )
+
+    Logger()
 
     TimeRecorder(config["num_layers"], config["num_epochs"])
 

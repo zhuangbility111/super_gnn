@@ -1,5 +1,5 @@
 import torch
-import computation_ops
+import supergnn_ops
 import math
 import time
 import numpy as np
@@ -39,7 +39,7 @@ def run_quantization_cpu_quantize_tensor(data_fp32, bits, local_num_nodes):
     data_int8 = torch.empty((math.ceil(local_num_nodes / float(8 / bits)) * feat_len), dtype=torch.uint8)
     quantized_params = torch.empty((local_num_nodes, 2), dtype=torch.float32)
     inner_quantization_begin = time.perf_counter()
-    computation_ops.quantize_tensor(data_fp32, data_int8, quantized_params, bits)
+    supergnn_ops.quantize_tensor(data_fp32, data_int8, quantized_params, bits)
     inner_quantization_end = time.perf_counter()
     print("inner_quantization_time on aggr on row (ms): ", (inner_quantization_end - inner_quantization_begin) * 1000.0)
     return data_int8, quantized_params
@@ -47,7 +47,7 @@ def run_quantization_cpu_quantize_tensor(data_fp32, bits, local_num_nodes):
 
 def run_quantization_cpu_dequantize_tensor(data_int8, dequantized_params, bits):
     data_fp32_dequant = torch.empty((num_nodes, feat_len), dtype=torch.float32)
-    computation_ops.dequantize_tensor(data_int8, data_fp32_dequant, dequantized_params, bits)
+    supergnn_ops.dequantize_tensor(data_int8, data_fp32_dequant, dequantized_params, bits)
     return data_fp32_dequant
 
 
@@ -71,7 +71,7 @@ def run_quantization_cpu_quantize_tensor_v1(data_fp32, nodes_num_bits_tensor):
     # scales = torch.empty((num_nodes), dtype=torch.float32)
     prepare_end = time.perf_counter()
     inner_quantization_begin = time.perf_counter()
-    computation_ops.quantize_tensor_v1(data_fp32, data_int8, quantized_nodes_feat_range, quantized_params)
+    supergnn_ops.quantize_tensor_v1(data_fp32, data_int8, quantized_nodes_feat_range, quantized_params)
     inner_quantization_end = time.perf_counter()
     print("prepare_time (ms): ", (prepare_end - prepare_begin) * 1000.0)
     print("inner_quantization_time on aggr on col (ms): ", (inner_quantization_end - inner_quantization_begin) * 1000.0)
@@ -81,7 +81,7 @@ def run_quantization_cpu_quantize_tensor_v1(data_fp32, nodes_num_bits_tensor):
 def run_quantization_cpu_dequantize_tensor_v1(data_int8, quantized_nodes_feat_range, quantized_params):
     num_nodes = quantized_nodes_feat_range.size(0) - 1
     data_fp32_dequant = torch.empty((num_nodes, feat_len), dtype=torch.float32)
-    computation_ops.dequantize_tensor_v1(
+    supergnn_ops.dequantize_tensor_v1(
         data_int8, data_fp32_dequant, quantized_nodes_feat_range, quantized_params
     )
     return data_fp32_dequant
@@ -110,7 +110,7 @@ def run_quantization_cpu_quantize_tensor_v2(data_fp32, nodes_num_bits_tensor, ze
     # scales = torch.empty((num_nodes), dtype=torch.float32)
     prepare_end = time.perf_counter()
     inner_quantization_begin = time.perf_counter()
-    computation_ops.quantize_tensor_v2_torch(
+    supergnn_ops.quantize_tensor_v2_torch(
         data_fp32, data_int8, quantized_nodes_feat_range, zero_point, scale, bits
     )
     return data_int8, quantized_nodes_feat_range
@@ -120,7 +120,7 @@ def run_quantization_cpu_quantize_tensor_v2(data_fp32, nodes_num_bits_tensor, ze
 def run_quantization_cpu_dequantize_tensor_v2(data_int8, quantized_nodes_feat_range, zero_point, scale, bits):
     num_nodes = quantized_nodes_feat_range.size(0) - 1
     data_fp32_dequant = torch.empty((num_nodes, feat_len), dtype=torch.float32)
-    computation_ops.dequantize_tensor_v2_torch(
+    supergnn_ops.dequantize_tensor_v2_torch(
         data_int8, data_fp32_dequant, quantized_nodes_feat_range, zero_point, scale, bits
     )
     return data_fp32_dequant
@@ -139,8 +139,8 @@ def run_quantization_cpu_quantize_tensor_for_all_procs(data_fp32, bits):
     print("prepare time on for_all_procs (ms): ", (prepare_end - prepare_begin) * 1000.0)
     quantized_params = torch.empty((num_nodes, 2), dtype=torch.float32)
     inner_quantization_begin = time.perf_counter()
-    # computation_ops.quantize_tensor(data_fp32, data_int8, quantized_params, bits)
-    computation_ops.quantize_tensor_for_all_procs(data_fp32, data_int8, quantized_params, work_range_per_proc, num_procs, bits)
+    # supergnn_ops.quantize_tensor(data_fp32, data_int8, quantized_params, bits)
+    supergnn_ops.quantize_tensor_for_all_procs(data_fp32, data_int8, quantized_params, work_range_per_proc, num_procs, bits)
     inner_quantization_end = time.perf_counter()
     print("inner_quantization_time for_all_procs (ms): ", (inner_quantization_end - inner_quantization_begin) * 1000.0)
     return data_int8, quantized_params, work_range_per_proc
@@ -148,7 +148,7 @@ def run_quantization_cpu_quantize_tensor_for_all_procs(data_fp32, bits):
 def run_quantization_cpu_dequantize_tensor_for_all_procs(data_int8, dequantized_params, work_range_per_proc, bits):
     data_fp32_dequant = torch.empty((num_nodes, feat_len), dtype=torch.float32)
     num_procs = work_range_per_proc.size(0) - 1
-    computation_ops.dequantize_tensor_for_all_procs(data_int8, data_fp32_dequant, dequantized_params, work_range_per_proc, num_procs, bits)
+    supergnn_ops.dequantize_tensor_for_all_procs(data_int8, data_fp32_dequant, dequantized_params, work_range_per_proc, num_procs, bits)
     return data_fp32_dequant
 
 

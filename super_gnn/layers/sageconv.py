@@ -7,12 +7,9 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.dense.linear import Linear
 
 import time
-import sys
-
-sys.path.append("../../")
 
 from time_recorder import TimeRecorder
-from .aggregator import Aggregator
+from super_gnn.aggregator import Aggregator
 
 
 class DistSAGEConvGrad(MessagePassing):
