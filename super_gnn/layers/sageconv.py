@@ -8,7 +8,7 @@ from torch_geometric.nn.dense.linear import Linear
 
 import time
 
-from time_recorder import TimeRecorder
+from super_gnn.time_recorder import TimeRecorder
 from super_gnn.aggregator import Aggregator
 
 

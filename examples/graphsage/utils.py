@@ -2,7 +2,7 @@ import torch
 import torch.distributed as dist
 import random
 import numpy as np
-from .sage import DistSAGE
+from sage import DistSAGE
 
 
 def create_model_and_optimizer(config: dict):

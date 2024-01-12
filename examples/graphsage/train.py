@@ -12,7 +12,7 @@ from super_gnn.assigner import Assigner
 from super_gnn.time_recorder import TimeRecorder
 
 from super_gnn.quantizer import Quantizer_for_all_procs
-from .logger import Logger
+from logger import Logger
 
 
 def train(model, data, optimizer, num_epochs, num_bits):

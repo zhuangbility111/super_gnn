@@ -1,8 +1,8 @@
 from torch import Tensor
 from torch_sparse import SparseTensor
 from typing import Optional
-from .CommBuffer import CommBuffer, CommBufferForQuantization
-from .CommSplits import CommSplits
+from super_gnn.data_manager import CommBuffer, CommBufferForQuantization
+from super_gnn.data_manager import CommSplits
 
 
 class DistributedGraph(object):

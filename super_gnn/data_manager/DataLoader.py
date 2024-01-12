@@ -2,10 +2,14 @@ import time
 import numpy as np
 import torch
 import torch.distributed as dist
-from .DistributedGraph import DistributedGraph, DistributedGraphForPre
-from .DataProcessor import DataProcessor, DataProcessorForPreAggresive
-from .CommBuffer import CommBuffer, CommBufferForQuantization
-from .CommSplits import CommSplits
+# from .DistributedGraph import DistributedGraph, DistributedGraphForPre
+# from .DataProcessor import DataProcessor, DataProcessorForPreAggresive
+# from .CommBuffer import CommBuffer, CommBufferForQuantization
+# from .CommSplits import CommSplits
+from super_gnn.data_manager import DistributedGraph, DistributedGraphForPre
+from super_gnn.data_manager import DataProcessor, DataProcessorForPreAggresive
+from super_gnn.data_manager import CommBuffer, CommBufferForQuantization
+from super_gnn.data_manager import CommSplits
 import os
 
 

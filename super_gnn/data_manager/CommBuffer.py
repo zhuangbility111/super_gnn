@@ -1,5 +1,6 @@
 import torch
-from . import CommSplits
+# from .CommSplits import CommSplits
+from super_gnn.data_manager import CommSplits
 
 class CommBuffer(object):
     def __init__(self, comm_splits: CommSplits, feat_len: int, bits: int) -> None:
