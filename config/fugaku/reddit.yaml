@@ -1,5 +1,5 @@
 # input_dir: "../../../dataset/reddit/balanced_training_samples/"
-input_dir: "../../../dataset/reddit/balanced_out_degree/"
+input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/reddit/balanced_out_degree/"
 graph_name: "reddit"
 model_name: "sage"
 in_channels: 602
