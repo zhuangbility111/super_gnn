@@ -1,0 +1,20 @@
+# input_dir: "../../../dataset/ogbn_products_new/balanced_training_samples/"
+input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/reddit/balanced_out_degree/"
+graph_name: "reddit"
+in_channels: 602
+hidden_channels: 256
+out_channels: 41
+num_layers: 3
+dropout: 0.5
+num_epochs: 300
+random_seed: 42
+patience: 100
+layer_norm: true
+w_att: 0.05
+w_fc2: 0.0
+w_fc1: 0.0
+lr_fc: 0.1
+lr_att: 0.1
+combine_type: cat
+is_async: false
+use_defined_ddp: false

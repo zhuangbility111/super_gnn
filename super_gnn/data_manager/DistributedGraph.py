@@ -42,7 +42,8 @@ class DistributedGraph(object):
         local_degs.index_add_(dim=0, index=local_edges_list[0], source=source)
         source = torch.ones((remote_edges_list[0].shape[0]), dtype=torch.float32)
         local_degs.index_add_(dim=0, index=remote_edges_list[0], source=source)
-        local_degs = local_degs.clamp(min=1).unsqueeze(-1)
+        # local_degs = local_degs.clamp(min=1).unsqueeze(-1)
+        local_degs = local_degs.unsqueeze(-1)
         if local_degs is not None:
             self.in_degrees = local_degs
         return local_degs

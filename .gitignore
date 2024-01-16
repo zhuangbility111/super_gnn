@@ -173,3 +173,10 @@ cython_debug/
 
 # log files
 /log
+
+# npy files
+*.npy
+
+# model files
+pretrained/
+*.pt

@@ -170,7 +170,7 @@ def gcn_normalize_on_dist_graph(dist_graph):
     print("remote_deg_inv_sqrt = {}".format(remote_deg_inv_sqrt))
     dist_graph.remote_adj_t = deg_inv_sqrt.view(-1, 1) * dist_graph.remote_adj_t * remote_deg_inv_sqrt.view(1, -1)
 
-    return dist_graph
+    # return dist_graph
 
 def check_result(global_adj_t, dist_graph, local_nodes_list, remote_nodes_list):
     local_mat = dist_graph.local_adj_t.to_dense()
@@ -218,6 +218,7 @@ if __name__ == "__main__":
     global_adj_t = gcn_norm_on_global_graph(global_edges_list, num_nodes)
 
     # gcn_norm on distributed graph
-    dist_graph = gcn_normalize_on_dist_graph(dist_graph)
+    # dist_graph = gcn_normalize_on_dist_graph(dist_graph)
+    gcn_normalize_on_dist_graph(dist_graph)
 
     check_result(global_adj_t, dist_graph, local_nodes_list, remote_nodes_list)
