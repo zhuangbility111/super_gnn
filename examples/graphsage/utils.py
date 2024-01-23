@@ -25,6 +25,7 @@ def create_model_and_optimizer(config: dict):
             config["dropout"],
             config["num_bits"],
             config["is_pre_delay"],
+            config["norm_type"],
         )
 
         model.reset_parameters()
