@@ -24,6 +24,9 @@ def train(model, data, optimizer, num_epochs, num_bits):
     total_update_weight_dur = 0.0
     total_training_dur = 0.0
 
+    num_train_nodes = torch.tensor([data["nodes_train_masks"].size(0)], dtype=torch.int64)
+    dist.all_reduce(num_train_nodes, op=dist.ReduceOp.SUM)
+
     # with profile(activities=[ProfilerActivity.CPU]) as prof:
     dist.barrier()
     for epoch in range(num_epochs):
@@ -33,7 +36,9 @@ def train(model, data, optimizer, num_epochs, num_bits):
         optimizer.zero_grad()
         out = model(data["graph"], data["nodes_features"])
         backward_start = time.perf_counter()
-        loss = F.nll_loss(out[data["nodes_train_masks"]], data["nodes_labels"][data["nodes_train_masks"]])
+        # loss = F.nll_loss(out[data["nodes_train_masks"]], data["nodes_labels"][data["nodes_train_masks"]])
+        loss = F.nll_loss(out[data["nodes_train_masks"]], data["nodes_labels"][data["nodes_train_masks"]], reduction="sum")
+        loss = loss / float(num_train_nodes.item())
         loss.backward()
 
         update_weight_start = time.perf_counter()
@@ -104,4 +109,4 @@ if __name__ == "__main__":
     train(model, data, optimizer, config["num_epochs"], config["num_bits"])
 
     TimeRecorder.ctx.print_total_time()
-    TimeRecorder.ctx.save_time_to_file(config["graph_name"], world_size)
+    # TimeRecorder.ctx.save_time_to_file(config["graph_name"], world_size)
