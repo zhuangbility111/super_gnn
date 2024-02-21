@@ -167,9 +167,20 @@ def get_distributed_graph_for_pre_aggressive(
         nodes_range_on_each_subgraph[rank],
     )
 
+    def check_comm_volume(pre_post_aggr_from_splits, pre_post_aggr_to_splits):
+        send_volume = 0
+        recv_volume = 0
+        for i in range(world_size):
+            send_volume += pre_post_aggr_to_splits[i]
+            recv_volume += pre_post_aggr_from_splits[i]
+        return (send_volume, recv_volume)
+
     comm_splits = CommSplits(pre_post_aggr_from_splits, pre_post_aggr_to_splits, world_size, bits)
     comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
     comm_buf_for_quantization = None
+
+    send_volume, recv_volume = check_comm_volume(pre_post_aggr_from_splits, pre_post_aggr_to_splits)
+    print("rank = {}, send_volume = {}, recv_volume = {}".format(rank, send_volume, recv_volume))
 
     if bits == 2:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)

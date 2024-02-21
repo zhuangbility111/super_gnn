@@ -60,6 +60,37 @@ def test_decide_pre_or_post_aggr(data_processor_for_pre):
     result_4 = data_processor_for_pre.decide_pre_or_post_aggr(src_in_remote_edges_4, dst_in_remote_edges_4, is_pre, is_post)
     assert torch.equal(result_4, expected_result_4), "Test case 4 failed"
 
+def test_decide_pre_or_post_aggr_v2(data_processor_for_pre):
+    is_pre = 1
+    is_post = 0
+
+    # Test case 1: Out degree > In degree, should return post_aggr flag
+    src_in_remote_edges_1 = torch.tensor([1, 3, 1, 1])
+    dst_in_remote_edges_1 = torch.tensor([12, 11, 12, 13])
+    expected_result_1 = torch.tensor([is_post, is_post, is_post, is_post])
+    result_1 = data_processor_for_pre.decide_pre_or_post_aggr_v2(src_in_remote_edges_1, dst_in_remote_edges_1, is_pre, is_post)
+    assert torch.equal(result_1, expected_result_1), "Test case 1 failed"
+
+    # Test case 2: Out degree <= In degree, should return pre_aggr flag
+    src_in_remote_edges_2 = torch.tensor([2, 1, 2, 1, 0])
+    dst_in_remote_edges_2 = torch.tensor([11, 14, 11, 11, 11])
+    expected_result_2 = torch.tensor([is_pre, is_post, is_pre, is_post, is_pre])
+    result_2 = data_processor_for_pre.decide_pre_or_post_aggr_v2(src_in_remote_edges_2, dst_in_remote_edges_2, is_pre, is_post)
+    assert torch.equal(result_2, expected_result_2), "Test case 2 failed"
+
+    # Test case 3: Empty input, should return empty result
+    src_in_remote_edges_3 = torch.tensor([], dtype=torch.int64)
+    dst_in_remote_edges_3 = torch.tensor([], dtype=torch.int64)
+    expected_result_3 = torch.tensor([], dtype=torch.int64)
+    result_3 = data_processor_for_pre.decide_pre_or_post_aggr_v2(src_in_remote_edges_3, dst_in_remote_edges_3, is_pre, is_post)
+    assert torch.equal(result_3, expected_result_3), "Test case 3 failed"
+
+    src_in_remote_edges_4 = torch.tensor([0, 2, 2, 2, 4, 4, 5, 5])
+    dst_in_remote_edges_4 = torch.tensor([11, 11, 12, 14, 14, 13, 16, 13])
+    expected_result_4 = torch.tensor([is_post, is_post, is_post, is_post, is_post, is_post, is_post, is_post])
+    result_4 = data_processor_for_pre.decide_pre_or_post_aggr_v2(src_in_remote_edges_4, dst_in_remote_edges_4, is_pre, is_post)
+    assert torch.equal(result_4, expected_result_4), "Test case 4 failed"
+
 def test_collect_edges_sent_to_other_subgraphs(data_processor_for_pre):
     # Test case 1: Both pre-aggregated and post-aggregated edges
     src_in_remote_edges = torch.tensor([0, 2, 2, 2, 4, 4, 5, 5])
@@ -184,7 +215,7 @@ def test_split_remote_edges_for_aggr_and_graph_exchange(data_processor_for_pre):
     begin_node_on_each_subgraph = torch.tensor([0, 2, 5, 10, 14], dtype=torch.int64)
     remote_edges_list = [
         torch.tensor([8, 9, 3, 6, 6, 7, 1, 0, 3, 5]),
-        torch.tensor([9, 7, 10, 8, 4, 7, 10, 10, 8, 11])
+        torch.tensor([109, 107, 110, 108, 104, 107, 110, 110, 108, 111]) 
     ]
     world_size = 4
 
@@ -199,9 +230,9 @@ def test_split_remote_edges_for_aggr_and_graph_exchange(data_processor_for_pre):
 
     # Test remote_edges_sent_for_graph_exchange
     expected_remote_edges_sent_for_graph_exchange = [
-        torch.tensor([1, 0, 10, 10]),
+        torch.tensor([1, 0, 110, 110]),
         torch.tensor([3, 3]),
-        torch.tensor([6, 9, 7, 8, 5, 6, 7, 7, 9, 11]),
+        torch.tensor([5, 6, 8, 9, 7, 5, 6, 8, 107, 107]),
         torch.tensor([], dtype=torch.int64)
     ]
     assert len(remote_edges_sent_for_graph_exchange) == len(expected_remote_edges_sent_for_graph_exchange)
@@ -210,8 +241,8 @@ def test_split_remote_edges_for_aggr_and_graph_exchange(data_processor_for_pre):
 
     # Test remote_edges_for_aggr_on_recv
     expected_remote_edges_for_aggr_on_recv = [
-        torch.tensor([10, 3, 3, 6, 6, 7, 9, 11]),
-        torch.tensor([10, 10, 8, 8, 4, 7, 9, 11]),
+        torch.tensor([110, 3, 3, 5, 6, 6, 8, 107]),
+        torch.tensor([110, 110, 108, 111, 108, 104, 109, 107]),
     ]
     assert len(remote_edges_for_aggr_on_recv) == len(expected_remote_edges_for_aggr_on_recv)
     for i in range(len(remote_edges_for_aggr_on_recv)):
