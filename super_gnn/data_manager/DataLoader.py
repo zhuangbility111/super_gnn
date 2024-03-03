@@ -10,6 +10,7 @@ from super_gnn.data_manager import DistributedGraph, DistributedGraphForPre
 from super_gnn.data_manager import DataProcessor, DataProcessorForPreAggresive
 from super_gnn.data_manager import CommBuffer, CommBufferForQuantization
 from super_gnn.data_manager import CommSplits
+from super_gnn.data_manager.VertexCoverFinder import VertexCoverFinder
 import os
 
 
@@ -234,6 +235,9 @@ def load_data(config):
     ) = load_graph_structures(input_dir, graph_name, rank)
 
     if is_pre_delay:
+        # create vertex cover finder for deciding pre or post aggregation
+        vertex_cover_file_list = [ os.path.join(input_dir, "p{:0>3d}-{}_to_p{:0>3d}_vertex_cover_set.npy".format(rank, graph_name, dst_rank)) for dst_rank in range(world_size)]
+        VertexCoverFinder(vertex_cover_file_list=vertex_cover_file_list)
         # distributed_graph = get_distributed_graph_for_pre(local_edges_list, remote_edges_list, nodes_range_on_each_subgraph, \
         #                                                     num_local_nodes, max_feat_len, rank, world_size, is_fp16)
         distributed_graph = get_distributed_graph_for_pre_aggressive(

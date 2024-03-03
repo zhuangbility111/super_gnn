@@ -6,6 +6,8 @@ import gc
 import networkx as nx
 import time
 
+import os
+from super_gnn.data_manager.VertexCoverFinder import VertexCoverFinder
 
 class DataProcessor(object):
     def __init__(self) -> None:
@@ -160,20 +162,14 @@ class DataProcessorForPreAggresive(object):
             src_in_remote_edges = src_in_remote_edges[edge_idx]
             dst_in_remote_edges = dst_in_remote_edges[edge_idx]
 
-            is_pre = 1
-            is_post = 0
-
             # decide pre_aggr or post_aggr for each remote edge
-            # pre_or_post_aggr_flags = DataProcessorForPreAggresive.decide_pre_or_post_aggr(
-            #     src_in_remote_edges, dst_in_remote_edges, is_pre, is_post
+            # pre_aggr_edge_idx, post_aggr_edge_idx = DataProcessorForPreAggresive.decide_pre_or_post_aggr(
+            #     src_in_remote_edges, dst_in_remote_edges
             # )
 
-            pre_or_post_aggr_flags = DataProcessorForPreAggresive.decide_pre_or_post_aggr_v2(
-                src_in_remote_edges, dst_in_remote_edges, is_pre, is_post
+            pre_aggr_edge_idx, post_aggr_edge_idx = DataProcessorForPreAggresive.decide_pre_or_post_aggr_v2(
+                src_in_remote_edges, dst_in_remote_edges, i
             )
-
-            pre_aggr_edge_idx = pre_or_post_aggr_flags == is_pre
-            post_aggr_edge_idx = pre_or_post_aggr_flags == is_post
 
             DataProcessorForPreAggresive.collect_edges_sent_to_other_subgraphs(
                 src_in_remote_edges,
@@ -232,7 +228,7 @@ class DataProcessorForPreAggresive(object):
         return remote_edges_for_aggr_for_send, begin_edge_on_each_partition_to, send_splits_for_data_exchange
 
     @staticmethod
-    def decide_pre_or_post_aggr(src_in_remote_edges, dst_in_remote_edges, is_pre, is_post):
+    def decide_pre_or_post_aggr(src_in_remote_edges, dst_in_remote_edges):
         '''
         to decide pre_aggr or post_aggr for each remote edge based on the out degree of src nodes and in degree of dst nodes
         '''
@@ -242,7 +238,8 @@ class DataProcessorForPreAggresive(object):
         # get in degrees of dst nodes
         in_degrees = DataProcessorForPreAggresive.get_degrees(dst_in_remote_edges)
 
-        pre_or_post_aggr_flags = torch.zeros(src_in_remote_edges.shape[0], dtype=torch.int64)
+        pre_aggr_edge_idx = list()
+        post_aggr_edge_idx = list()
 
         # traverse the remote edges to decide pre_aggr or post_aggr
         for e_idx in range(src_in_remote_edges.shape[0]):
@@ -250,81 +247,38 @@ class DataProcessorForPreAggresive(object):
             dst_node = dst_in_remote_edges[e_idx].item()
             # if the out degree of src node > in degree of dst node, then post_aggr
             if out_degrees[src_node] > in_degrees[dst_node]:
-                pre_or_post_aggr_flags[e_idx] = is_post
+                post_aggr_edge_idx.append(e_idx)
             # else, pre_aggr
             else:
-                pre_or_post_aggr_flags[e_idx] = is_pre
+                pre_aggr_edge_idx.append(e_idx)
 
-        return pre_or_post_aggr_flags
+        return (torch.tensor(pre_aggr_edge_idx, dtype=torch.int64), 
+                torch.tensor(post_aggr_edge_idx, dtype=torch.int64))
     
     @staticmethod
-    def decide_pre_or_post_aggr_v2(src_in_remote_edges, dst_in_remote_edges, is_pre, is_post):
+    def decide_pre_or_post_aggr_v2(src_in_remote_edges, dst_in_remote_edges, dst_rank):
         '''
         to decide pre_aggr or post_aggr for each remote edge based on the minimum vertex cover algorithm
         '''
-        def construct_graph(edges_list):
-            graph = nx.DiGraph()
-            graph.add_edges_from(edges_list)
-            # print(graph.edges())
-            return graph
-        
-        def find_minimum_vertex_cover(graph):
-            # convert the directed graph to undirected graph
-            undirected_graph = graph.to_undirected()
-
-            begin = time.perf_counter()
-            # get all connected components in the undirected graph
-            connected_components = list(nx.connected_components(undirected_graph))
-            end = time.perf_counter()
-            print("Time for connected components: ", end - begin, "s", flush=True)
-
-            # a set for all vertex cover in different connected components
-            all_vertex_cover = set()
-
-            # find the minimum vertex cover in each connected component
-            for component in connected_components:
-                subgraph = undirected_graph.subgraph(component)
-                # print("The subgraph is: ", subgraph.edges())
-                if nx.is_bipartite(subgraph):
-                    begin = time.perf_counter()
-                    # get the maximum matching (minimum vertex cover) in current bipartite graph
-                    matching = nx.bipartite.maximum_matching(subgraph)
-                    end = time.perf_counter()
-                    print("Time for maximum matching: ", end - begin, "s", flush=True)
-                    begin = time.perf_counter()
-                    vertex_cover = nx.algorithms.bipartite.to_vertex_cover(subgraph, matching)
-                    end = time.perf_counter()
-                    print("Time for vertex cover: ", end - begin, "s", flush=True)
-                else:
-                    print("Error: the subgraph is not bipartite")
-                
-                # update the set of all vertex cover with the current vertex cover
-                all_vertex_cover.update(vertex_cover)
-            
-            return all_vertex_cover
-        
-        def decide_pre_or_post(src_in_remote_edges, all_vertex_cover, is_pre, is_post):
-            pre_or_post_aggr_flags = torch.zeros(len(src_in_remote_edges), dtype=torch.int64)
-
-            for e_idx in range(len(src_in_remote_edges)):
-                src_node = src_in_remote_edges[e_idx]
-                if src_node in all_vertex_cover:
-                    pre_or_post_aggr_flags[e_idx] = is_post
-                else:
-                    pre_or_post_aggr_flags[e_idx] = is_pre
-
-            return pre_or_post_aggr_flags
-
+        # convert the remote edges to a edge list
         src_in_remote_edges = src_in_remote_edges.tolist()
         dst_in_remote_edges = dst_in_remote_edges.tolist()
         edges_list = zip(src_in_remote_edges, dst_in_remote_edges)
-        graph = construct_graph(edges_list)
+        
+        vertex_cover = VertexCoverFinder.ctx.find_minimum_vertex_cover(edges_list, dst_rank)
 
-        all_vertex_cover = find_minimum_vertex_cover(graph)
+        pre_aggr_edge_idx = list()
+        post_aggr_edge_idx = list()
 
-        pre_or_post_aggr_flags = decide_pre_or_post(src_in_remote_edges, all_vertex_cover, is_pre, is_post)
+        for e_idx in range(len(src_in_remote_edges)):
+            src_node = src_in_remote_edges[e_idx]
+            if src_node in vertex_cover:
+                post_aggr_edge_idx.append(e_idx)
+            else:
+                pre_aggr_edge_idx.append(e_idx)
 
-        return pre_or_post_aggr_flags
+        return (torch.tensor(pre_aggr_edge_idx, dtype=torch.int64), 
+                torch.tensor(post_aggr_edge_idx, dtype=torch.int64))
 
     # to collect the pre_aggr edges and post_aggr edges which will be sent to other MPI ranks
     @staticmethod
