@@ -14,6 +14,8 @@ from torch.nn import Parameter
 from torch.nn import init
 import torch.distributed as dist
 
+from mask_label import MaskLabel
+
 class DistributedBN1D(torch.nn.Module):
     """Distributed Batch normalization layer
 
@@ -136,6 +138,8 @@ class DistSAGE(torch.nn.Module):
     ):
         super().__init__()
 
+        self.label_emb = MaskLabel(out_channels, in_channels)
+
         self.convs = torch.nn.ModuleList()
         self.convs.append(DistSAGEConvGrad(in_channels, hidden_channels, num_bits, is_pre_delay))
 
@@ -168,10 +172,14 @@ class DistSAGE(torch.nn.Module):
             for norm in self.norms:
                 norm.reset_parameters()
 
-    def forward(self, graph, nodes_feats):
+    def forward(self, graph, nodes_feats, labels, label_mask):
         total_conv_time = 0.0
         total_relu_time = 0.0
         total_dropout_time = 0.0
+
+        # label augmentation (add partial label information to nodes_feats)
+        nodes_feats = self.label_emb(nodes_feats, labels, label_mask)
+
         for i, conv in enumerate(self.convs[:-1]):
             conv_begin = time.perf_counter()
             nodes_feats = conv(graph, nodes_feats, i)

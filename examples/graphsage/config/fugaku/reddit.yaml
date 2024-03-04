@@ -8,8 +8,9 @@ out_channels: 41
 num_layers: 3
 dropout: 0.5
 lr: 0.01
-weight_decay: 0.0
+weight_decay: 0.00005
 num_epochs: 250
 random_seed: 0
 is_async: false
 assign_period: 50
+norm_type: "LayerNorm"

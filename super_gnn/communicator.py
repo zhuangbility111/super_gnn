@@ -62,8 +62,7 @@ class Communicator(object):
             comm_handle = self.comm_with_fp32(comm_splits, comm_buf, direction)
         elif self.num_bits == 16:
             comm_handle = self.comm_with_fp16(comm_splits, comm_buf, direction)
-            
-        elif self.num_bits == 2:
+        elif self.num_bits == 2 or self.num_bits == 4 or self.num_bits == 8:
             # comm_handle, quantized_buf, dequantized_nodes_feat_range, dequantized_params = self.comm_with_pure_quantization(
             #     recv_buf, send_buf, recv_splits, send_splits
             # )

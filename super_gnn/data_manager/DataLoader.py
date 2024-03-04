@@ -109,7 +109,7 @@ def get_distributed_graph(
     comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
     comm_buf_for_quantization = None
 
-    if bits == 2:
+    if bits == 2 or bits == 4 or bits == 8:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
 
     distributed_graph = DistributedGraph(
@@ -183,7 +183,7 @@ def get_distributed_graph_for_pre_aggressive(
     send_volume, recv_volume = check_comm_volume(pre_post_aggr_from_splits, pre_post_aggr_to_splits)
     print("rank = {}, send_volume = {}, recv_volume = {}".format(rank, send_volume, recv_volume))
 
-    if bits == 2:
+    if bits == 2 or bits == 4 or bits == 8:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
 
     distributed_graph = DistributedGraphForPre(

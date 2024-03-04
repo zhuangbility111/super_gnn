@@ -27,24 +27,22 @@ class CommBuffer(object):
 
 class CommBufferForQuantization(object):
     def __init__(self, comm_splits: CommSplits, feat_len: int, bits: int) -> None:
-        if bits == 2:
-            self.quantized_send_data_buf = torch.zeros((sum(comm_splits.send_splits_int2), feat_len), dtype=torch.uint8)
-            self.quantized_recv_data_buf = torch.zeros((sum(comm_splits.recv_splits_int2), feat_len), dtype=torch.uint8)
-            self.quantized_send_params_buf_fp32 = torch.zeros((sum(comm_splits.send_splits), 2), dtype=torch.float32)
-            self.quantized_recv_params_buf_fp32 = torch.zeros((sum(comm_splits.recv_splits), 2), dtype=torch.float32)
-            self.quantized_send_params_buf_bf16 = torch.zeros((sum(comm_splits.send_splits), 2), dtype=torch.bfloat16)
-            self.quantized_recv_params_buf_bf16 = torch.zeros((sum(comm_splits.recv_splits), 2), dtype=torch.bfloat16)
+        self.quantized_send_data_buf = torch.zeros((sum(comm_splits.send_splits_int2), feat_len), dtype=torch.uint8)
+        self.quantized_recv_data_buf = torch.zeros((sum(comm_splits.recv_splits_int2), feat_len), dtype=torch.uint8)
+        self.quantized_send_params_buf_fp32 = torch.zeros((sum(comm_splits.send_splits), 2), dtype=torch.float32)
+        self.quantized_recv_params_buf_fp32 = torch.zeros((sum(comm_splits.recv_splits), 2), dtype=torch.float32)
+        self.quantized_send_params_buf_bf16 = torch.zeros((sum(comm_splits.send_splits), 2), dtype=torch.bfloat16)
+        self.quantized_recv_params_buf_bf16 = torch.zeros((sum(comm_splits.recv_splits), 2), dtype=torch.bfloat16)
 
-            self.quantized_work_range_per_proc = torch.empty((len(comm_splits.send_splits) + 1), dtype=torch.int32)
-            self.quantized_work_range_per_proc[0] = 0
-            self.quantized_work_range_per_proc[1:] = torch.tensor(comm_splits.send_splits, dtype=torch.int32).cumsum(0)
+        self.quantized_work_range_per_proc = torch.empty((len(comm_splits.send_splits) + 1), dtype=torch.int32)
+        self.quantized_work_range_per_proc[0] = 0
+        self.quantized_work_range_per_proc[1:] = torch.tensor(comm_splits.send_splits, dtype=torch.int32).cumsum(0)
 
-            self.dequantized_work_range_per_proc = torch.empty((len(comm_splits.recv_splits) + 1), dtype=torch.int32)
-            self.dequantized_work_range_per_proc[0] = 0
-            self.dequantized_work_range_per_proc[1:] = torch.tensor(comm_splits.recv_splits, dtype=torch.int32).cumsum(0)
+        self.dequantized_work_range_per_proc = torch.empty((len(comm_splits.recv_splits) + 1), dtype=torch.int32)
+        self.dequantized_work_range_per_proc[0] = 0
+        self.dequantized_work_range_per_proc[1:] = torch.tensor(comm_splits.recv_splits, dtype=torch.int32).cumsum(0)
 
     def resize_buffer(self, comm_splits: CommSplits, feat_len: int, bits: int) -> None:
-        if bits == 2:
-        # resize the fp32 message buffer
-            self.quantized_send_data_buf.resize_((sum(comm_splits.send_splits_int2), feat_len))
-            self.quantized_recv_data_buf.resize_((sum(comm_splits.recv_splits_int2), feat_len))
+        # resize the quantization buffer
+        self.quantized_send_data_buf.resize_((sum(comm_splits.send_splits_int2), feat_len))
+        self.quantized_recv_data_buf.resize_((sum(comm_splits.recv_splits_int2), feat_len))
