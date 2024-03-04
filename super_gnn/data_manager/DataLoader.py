@@ -108,7 +108,7 @@ def get_distributed_graph(
     comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
     comm_buf_for_quantization = None
 
-    if bits == 2:
+    if bits == 2 or bits == 4 or bits == 8:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
 
     distributed_graph = DistributedGraph(
@@ -171,7 +171,7 @@ def get_distributed_graph_for_pre_aggressive(
     comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
     comm_buf_for_quantization = None
 
-    if bits == 2:
+    if bits == 2 or bits == 4 or bits == 8:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
 
     distributed_graph = DistributedGraphForPre(

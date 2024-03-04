@@ -6,16 +6,18 @@ import numpy as np
 
 # torch.set_num_threads(20)
 
-num_nodes = 256
-feat_len = 233
+num_nodes = 4333
+feat_len = 123
 
 
 def diff(out, ref, num_of_out, num_of_ref, atol=1e-06, rtol=1e-05):
     torch.set_printoptions(precision=10)
     idx_of_diff = torch.where(torch.abs(out - ref) > (atol + rtol * torch.abs(ref)))
+    print("------------------------------------------------")
     print(f"idx_of_diff = {idx_of_diff}")
     print(f"{num_of_ref}[idx_of_diff] = {ref[idx_of_diff]}")
     print(f"{num_of_out}[idx_of_diff] = {out[idx_of_diff]}")
+    print("------------------------------------------------")
 
     return idx_of_diff
 
@@ -185,40 +187,29 @@ def test_correctness_for_quantize_tensor(data_fp32, min_val, zero_point, scale, 
     diff(quantized_params_for_all_procs[:, 0], quantized_params_1[:, 1], "quantized_params_for_all_procs zero_point", "quantized_params_1 zero_point")
     diff(quantized_params_for_all_procs[:, 1], quantized_params_1[:, 2], "quantized_params_for_all_procs scale", "quantized_params_1 scale")
 
-    if bits == 8 or bits == 4:
+    def print_diff(ref, our, ref_str, our_str):
         idx_of_diff = torch.where(
-            torch.abs(data_fp32_dequant_aggr_on_row - data_fp32_dequant_ref)
-            > (atol + rtol * torch.abs(data_fp32_dequant_ref))
+            torch.abs(ref - our) > (atol + rtol * torch.abs(ref))
         )
-        print(f"ref_fp32[idx_of_diff] = {data_fp32_dequant_ref[idx_of_diff]}")
-        print(f"our_fp32_on_row[idx_of_diff] = {data_fp32_dequant_aggr_on_row[idx_of_diff]}")
+        
+        print("------------------------------------------------")
+        print(f"{our_str} = {our}")
+        print(f"idx_of_diff = {idx_of_diff}")
+        print(f"{ref_str}[idx_of_diff] = {ref[idx_of_diff]}")
+        print(f"{our_str}[idx_of_diff] = {our[idx_of_diff]}")
+        print("------------------------------------------------")
 
-        idx_of_diff = torch.where(
-            torch.abs(data_fp32_dequant_aggr_on_col - data_fp32_dequant_ref)
-            > (atol + rtol * torch.abs(data_fp32_dequant_ref))
-        )
-        print(f"ref_fp32[idx_of_diff] = {data_fp32_dequant_ref[idx_of_diff]}")
-        print(f"our_fp32_on_col[idx_of_diff] = {data_fp32_dequant_aggr_on_col[idx_of_diff]}")
+    if bits == 8 or bits == 4:
+        # print_diff(data_fp32_dequant_ref, data_fp32_dequant_aggr_on_row, "ref_dequant_fp32", "our_dequant_fp32_on_row")
+        # print_diff(data_int8_ref.int_repr(), data_int8_aggr_on_row.view(num_nodes, feat_len), "ref_int8", "our_int8_on_row")
+        print_diff(data_fp32_dequant_ref, data_fp32_dequant_aggr_on_col, "ref_dequant_fp32", "our_dequant_fp32_on_col")
+        print_diff(data_int8_ref.int_repr(), data_int8_aggr_on_col.view(num_nodes, feat_len), "ref_int8", "our_int8_on_col")
+        print_diff(data_fp32_dequant_ref, data_fp32_dequant_for_all_procs, "ref_dequant_fp32", "our_dequant_fp32_for_all_procs")
+        print_diff(data_int8_ref.int_repr(), data_int8_for_all_procs.view(num_nodes, feat_len), "ref_int8", "our_int8_for_all_procs")
 
     elif bits == 2:
-        idx_of_diff = torch.where(
-            torch.abs(data_fp32_dequant_aggr_on_col - data_fp32_dequant_aggr_on_row)
-            > (atol + rtol * torch.abs(data_fp32_dequant_aggr_on_row))
-        )
-        print("---------------------------------")
-        print(f"data_int8_aggr_on_row = {data_int8_aggr_on_row}")
-        print(f"our_fp32_on_row idx_of_diff = {idx_of_diff}")
-        print(f"our_fp32_on_row[idx_of_diff] = {data_fp32_dequant_aggr_on_row[idx_of_diff]}")
-        print(f"our_fp32_on_col[idx_of_diff] = {data_fp32_dequant_aggr_on_col[idx_of_diff]}")
-
-        idx_of_diff = torch.where(
-            torch.abs(data_fp32_dequant_aggr_on_col - data_fp32_dequant_for_all_procs)
-            > (atol + rtol * torch.abs(data_fp32_dequant_for_all_procs))
-        )
-        print("---------------------------------")
-        print(f"our_fp32_for_all_procs idx_of_diff = {idx_of_diff}")
-        print(f"our_fp32_for_all_procs[idx_of_diff] = {data_fp32_dequant_for_all_procs[idx_of_diff]}")
-        print(f"our_fp32_on_col[idx_of_diff] = {data_fp32_dequant_aggr_on_col[idx_of_diff]}")
+        print_diff(data_fp32_dequant_aggr_on_row, data_fp32_dequant_aggr_on_col, "our_dequant_fp32_on_row", "our_dequant_fp32_on_col")
+        print_diff(data_fp32_dequant_aggr_on_col, data_fp32_dequant_for_all_procs, "our_dequant_fp32_on_col", "our_dequant_fp32_for_all_procs")
 
         data_int8_aggr_on_row_list = []
         begin = time.perf_counter()
@@ -234,16 +225,7 @@ def test_correctness_for_quantize_tensor(data_fp32, min_val, zero_point, scale, 
 
         
         data_int8_aggr_on_row_for_all_procs = torch.cat(data_int8_aggr_on_row_list, dim=0)
-        idx_of_diff = torch.where(
-            torch.abs(data_int8_aggr_on_row_for_all_procs - data_int8_for_all_procs) 
-            > (atol + rtol * torch.abs(data_int8_for_all_procs))
-        )
-        print("---------------------------------")
-        print(f"our_fp32_for_all_procs idx_of_diff = {idx_of_diff}")
-        print(f"data_int8_for_all_procs[idx_of_diff] = {data_int8_for_all_procs[idx_of_diff]}")
-        print(f"data_int8_aggr_on_row_for_all_procs[idx_of_diff] = {data_int8_aggr_on_row_for_all_procs[idx_of_diff]}")
-        print("---------------------------------")
-
+        print_diff(data_int8_for_all_procs, data_int8_aggr_on_row_for_all_procs, "our_int8_for_all_procs", "our_int8_aggr_on_row_for_all_procs")
 
     # print("ref_int8[idx_of_diff] = {}".format(data_int8_ref.int_repr()[idx_of_diff]))
     # print("our_int8[idx_of_diff] = {}".format(data_int8[idx_of_diff]))
@@ -398,10 +380,7 @@ if __name__ == "__main__":
     )
     '''
     data_fp32 = torch.randn((num_nodes, feat_len), dtype=torch.float32)
-    # data_fp32 = torch.empty((num_nodes, feat_len), dtype=torch.float32)
-    # for i in range(num_nodes):
-    #     data_fp32[i] = torch.arange(feat_len, dtype=torch.float32)
-    bits = 2
+    bits = 8
 
     min_val = data_fp32.min(dim=1)[0]
     scale = (data_fp32.max(dim=1)[0] - data_fp32.min(dim=1)[0] + 10e-20) / (2**bits - 1)
