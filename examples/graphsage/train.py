@@ -28,13 +28,13 @@ def train_step(model, data, optimizer, epoch, num_train_nodes, label_rate):
     Assigner.ctx.reassign_node_dataformat(epoch)
     optimizer.zero_grad()
     out = model(data["graph"], data["nodes_features"], data["nodes_labels"], propagation_mask)
-    backward_start = time.perf_counter()
+    # backward_start = time.perf_counter()
     # loss = F.nll_loss(out[data["nodes_train_masks"]], data["nodes_labels"][data["nodes_train_masks"]], reduction="sum")
     loss = F.nll_loss(out[supervision_mask], data["nodes_labels"][supervision_mask], reduction="sum")
     loss = loss / num_train_nodes
     loss.backward()
 
-    update_weight_start = time.perf_counter()
+    # update_weight_start = time.perf_counter()
     optimizer.step()
     update_weight_end = time.perf_counter()
     # total_forward_dur += backward_start - forward_start
@@ -54,6 +54,7 @@ def test_step(model, data):
     TimeRecorder.ctx.set_is_training(False)
 
     predict_result = []
+    loss_result = []
 
     propagation_mask = data["nodes_train_masks"]
     # propagation_mask = torch.zeros(data["nodes_train_masks"].size(0)).bool()
@@ -67,19 +68,27 @@ def test_step(model, data):
         num_samples = mask.sum()
         predict_result.append(num_correct_samples)
         predict_result.append(num_samples)
+
+        loss = F.nll_loss(out[mask], data["nodes_labels"][mask], reduction="sum")
+        loss_result.append(loss.item())
+
     predict_result = torch.tensor(predict_result)
+    loss_result = torch.tensor(loss_result)
     if dist.get_world_size() > 1:
         dist.all_reduce(predict_result, op=dist.ReduceOp.SUM)
+        dist.all_reduce(loss_result, op=dist.ReduceOp.SUM)
 
     train_acc = float(predict_result[0] / predict_result[1])
     val_acc = float(predict_result[2] / predict_result[3])
     test_acc = float(predict_result[4] / predict_result[5])
 
+    val_loss = float(loss_result[1])
+
     TimeRecorder.ctx.set_is_training(True)
 
-    return train_acc, val_acc, test_acc
+    return train_acc, val_acc, test_acc, val_loss
 
-def train(model, data, optimizer, num_epochs, num_bits):
+def train(model, data, optimizer, num_epochs, num_bits, checkpt_file=None):
     rank = dist.get_rank()
     world_size = dist.get_world_size()
     # start training
@@ -89,6 +98,9 @@ def train(model, data, optimizer, num_epochs, num_bits):
     total_training_dur = 0.0
 
     label_rate = 0.62
+
+    best_val_loss = 9999999.0
+    best_test_acc = 0.0
 
     num_train_nodes = torch.tensor([data["nodes_train_masks"].size(0)], dtype=torch.int64)
     dist.all_reduce(num_train_nodes, op=dist.ReduceOp.SUM)
@@ -106,16 +118,40 @@ def train(model, data, optimizer, num_epochs, num_bits):
     dist.barrier()
     for epoch in range(num_epochs):
         train_begin = time.perf_counter()
-        loss = train_step(model, data, optimizer, epoch, num_train_nodes, label_rate)
+        train_loss = train_step(model, data, optimizer, epoch, num_train_nodes, label_rate)
         train_end = time.perf_counter()
-        train_acc, val_acc, test_acc = test_step(model, data)
+        train_acc, val_acc, test_acc, val_loss = test_step(model, data)
         
-        print("Rank: {}, Epoch: {}, Loss: {:.5f}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}, Time: {:.6f}".format(
-            rank, epoch, loss, train_acc, val_acc, test_acc, train_end - train_begin), flush=True)
+        print("Rank: {}, Epoch: {}, Train loss: {:.5f}, Val loss: {:.5f}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}, Time: {:.6f}".format(
+            rank, epoch, train_loss, val_loss, train_acc, val_acc, test_acc, train_end - train_begin), flush=True)
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            if rank == 0:
+                torch.save(model.state_dict(), checkpt_file)
+        
+        if test_acc > best_test_acc:
+            best_test_acc = test_acc
+    
+    print("Rank: {}, Best test acc: {:.4f}".format(rank, best_test_acc), flush=True)
 
         # Logger.ctx.print_acc_and_perf(model, data, epoch, loss, update_weight_end - forward_start)
         
     # Logger.ctx.print_forward_backward_perf(total_forward_dur, total_backward_dur, total_update_weight_dur, total_training_dur)
+
+def test(model, data, checkpt_file):
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    # synchronize all processes to make sure the model is saved
+    dist.barrier()
+
+    model.load_state_dict(torch.load(checkpt_file))
+    train_acc, val_acc, test_acc, val_loss = test_step(model, data)
+
+    if rank == 0:
+        print("Final res | World size: {}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}".format(
+            world_size, train_acc, val_acc, test_acc), flush=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -150,6 +186,8 @@ if __name__ == "__main__":
     model, optimizer = create_model_and_optimizer(config)
     data = load_data(config)
 
+    checkpt_file = "best_model_{}_{}_{}.pt".format(config["graph_name"], world_size, config["num_bits"])
+
     Assigner(
         config["num_bits"],
         config["num_layers"],
@@ -166,7 +204,9 @@ if __name__ == "__main__":
     print("config: {}".format(config), flush=True)
 
     # print("finish data loading.", flush=True)
-    train(model, data, optimizer, config["num_epochs"], config["num_bits"])
+    train(model, data, optimizer, config["num_epochs"], config["num_bits"], checkpt_file)
+
+    test(model, data, checkpt_file)
 
     TimeRecorder.ctx.print_total_time()
     # TimeRecorder.ctx.save_time_to_file(config["graph_name"], world_size)
