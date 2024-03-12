@@ -50,6 +50,7 @@ import os
 import numpy as np
 import torch
 
+import queue
 
 INFINITY = float("inf")
 
@@ -631,26 +632,47 @@ def to_vertex_cover(G, matching, top_nodes=None):
     # return (L - Z) | (R & Z)
     
     M = matching
-    visited = dict()
-    for node in G.nodes():
-        visited[node] = 0
-    def bfs_alternating_paths(v, Z, find_match=False):
-        visited[v] = 1
-        Z.add(v)
-        
-        if find_match:
-            u = M[v] if v in M.keys() else None
-            if u != None and visited[u] == 0:
-                bfs_alternating_paths(u, Z, find_match=False)
-        else:
-            unmactched_neibors = [n for n in G.neighbors(v) if visited[n] == 0 and M[n] != v]
-            for n in unmactched_neibors:
-                bfs_alternating_paths(n, Z, find_match=True)
-        return
-
+    visited = {node: 0 for node in G.nodes()}
+    # bfs for alternating paths
+    def bfs_alternating_paths(v, Z):
+        q = queue.Queue()
+        q.put(v)
+        level = 0
+        cur_level_size = 1
+        next_level_size = 0
+        while not q.empty():
+            v = q.get()
+            visited[v] = 1
+            Z.add(v)
+            cur_level_size -= 1
+            if level % 2 == 0: # if the level is even, then find the unmatched neighbors
+                for u in G.neighbors(v):
+                    if visited[u] == 0 and M.get(u) != v:
+                        q.put(u)
+                        next_level_size += 1
+            else: # if the level is odd, then find the matched neighbors
+                u = M.get(v) # if v in M.keys() else None
+                if u is not None and visited[u] == 0:
+                    q.put(u)
+                    next_level_size += 1
+            
+            if cur_level_size == 0:
+                level += 1
+                cur_level_size = next_level_size
+                next_level_size = 0
+            
+        # if find_match:
+        #     u = M.get(v) if v in M.keys() else None
+        #     if u != None and visited[u] == 0:
+        #         dfs_alternating_paths(u, Z, find_match=False)
+        # else:
+        #     unmactched_neibors = [n for n in G.neighbors(v) if visited[n] == 0 and M.get(n) != v]
+        #     for n in unmactched_neibors:
+        #         dfs_alternating_paths(n, Z, find_match=True)
+        # return
     Z = set()
     for u in U:
-        bfs_alternating_paths(u, Z, find_match=False)
+        bfs_alternating_paths(u, Z)
 
     return (L - Z) | (R & Z)
 
@@ -675,15 +697,15 @@ class VertexCoverFinder(object):
     def find_minimum_vertex_cover(self, edges_list, dst_rank):
         vertex_cover_set = set()
         # check if the vertex cover file exists
-        vertex_cover_file = self.vertex_cover_file_list[dst_rank]
-        if os.path.exists(vertex_cover_file):
-            print("The file {} exists.".format(vertex_cover_file), flush=True)
-            vertex_cover_array = np.load(vertex_cover_file)
-            # convert the numpy array to set
-            for node in vertex_cover_array:
-                vertex_cover_set.add(node)
-            # load the result from file and return
-            return vertex_cover_set
+        # vertex_cover_file = self.vertex_cover_file_list[dst_rank]
+        # if os.path.exists(vertex_cover_file):
+        #     print("The file {} exists.".format(vertex_cover_file), flush=True)
+        #     vertex_cover_array = np.load(vertex_cover_file)
+        #     # convert the numpy array to set
+        #     for node in vertex_cover_array:
+        #         vertex_cover_set.add(node)
+        #     # load the result from file and return
+        #     return vertex_cover_set
 
         # construct the directed graph
         graph = self.construct_graph(edges_list)
@@ -697,32 +719,35 @@ class VertexCoverFinder(object):
         end = time.perf_counter()
         print("Time for connected components: ", end - begin, "s", flush=True)
 
+        total_begin = time.perf_counter()
         # find the minimum vertex cover in each connected component
         for component in connected_components:
             subgraph = undirected_graph.subgraph(component)
             # print("The subgraph is: ", subgraph.edges())
             if nx.is_bipartite(subgraph):
-                begin = time.perf_counter()
+                # begin = time.perf_counter()
                 # get the maximum matching (minimum vertex cover) in current bipartite graph
                 # matching = nx.bipartite.maximum_matching(subgraph)
                 matching = maximum_matching(subgraph)
-                end = time.perf_counter()
-                print("Time for maximum matching: ", end - begin, "s", flush=True)
-                begin = time.perf_counter()
+                # end = time.perf_counter()
+                # print("Time for maximum matching: ", end - begin, "s", flush=True)
+                # begin = time.perf_counter()
                 # vertex_cover = nx.algorithms.bipartite.to_vertex_cover(subgraph, matching)
                 tmp_vertex_cover = to_vertex_cover(subgraph, matching)
-                end = time.perf_counter()
-                print("Time for vertex cover: ", end - begin, "s", flush=True)
+                # end = time.perf_counter()
+                # print("Time for vertex cover: ", end - begin, "s", flush=True)
             else:
                 print("Error: the subgraph is not bipartite")
             
             # update the set of all vertex cover with the current vertex cover
             vertex_cover_set.update(tmp_vertex_cover)
+        total_end = time.perf_counter()
+        print("Time for find minimum vertex cover: ", total_end - total_begin, "s", flush=True)
         
-        # convert the set to numpy array
-        vertex_cover_array = np.array(list(vertex_cover_set), dtype=np.int64)
-        # save the vertex cover set to file
-        np.save(vertex_cover_file, vertex_cover_array)
+        # # convert the set to numpy array
+        # vertex_cover_array = np.array(list(vertex_cover_set), dtype=np.int64)
+        # # save the vertex cover set to file
+        # np.save(vertex_cover_file, vertex_cover_array)
         
         return vertex_cover_set
     
