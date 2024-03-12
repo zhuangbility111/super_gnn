@@ -135,10 +135,14 @@ class DistSAGE(torch.nn.Module):
         num_bits=32,
         is_pre_delay=False,
         norm_type="LayerNorm",
+        is_label_augment=False,
     ):
         super().__init__()
 
-        self.label_emb = MaskLabel(out_channels, in_channels)
+        if is_label_augment:
+            self.label_emb = MaskLabel(out_channels, in_channels)
+        else:
+            self.label_emb = None
 
         self.convs = torch.nn.ModuleList()
         self.convs.append(DistSAGEConvGrad(in_channels, hidden_channels, num_bits, is_pre_delay))
@@ -177,8 +181,9 @@ class DistSAGE(torch.nn.Module):
         total_relu_time = 0.0
         total_dropout_time = 0.0
 
-        # label augmentation (add partial label information to nodes_feats)
-        nodes_feats = self.label_emb(nodes_feats, labels, label_mask)
+        if self.label_emb != None:
+            # label augmentation (add partial label information to nodes_feats)
+            nodes_feats = self.label_emb(nodes_feats, labels, label_mask)
 
         for i, conv in enumerate(self.convs[:-1]):
             conv_begin = time.perf_counter()

@@ -26,6 +26,7 @@ def create_model_and_optimizer(config: dict):
             config["num_bits"],
             config["is_pre_delay"],
             config["norm_type"],
+            config["is_label_augment"],
         )
 
         model.reset_parameters()

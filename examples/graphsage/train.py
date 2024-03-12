@@ -21,8 +21,12 @@ from mask_label import MaskLabel
 def train_step(model, data, optimizer, epoch, num_train_nodes, label_rate):
     model.train()
 
-    propagation_mask = MaskLabel.ratio_mask(data["nodes_train_masks"], ratio=label_rate)
-    supervision_mask = data["nodes_train_masks"] ^ propagation_mask
+    if label_rate != 0.0: # label augmentation
+        propagation_mask = MaskLabel.ratio_mask(data["nodes_train_masks"], ratio=label_rate)
+        supervision_mask = data["nodes_train_masks"] ^ propagation_mask
+    else:
+        propagation_mask = None
+        supervision_mask = data["nodes_train_masks"]
 
     forward_start = time.perf_counter()
     Assigner.ctx.reassign_node_dataformat(epoch)
@@ -48,7 +52,7 @@ def train_step(model, data, optimizer, epoch, num_train_nodes, label_rate):
     return loss
 
 @torch.no_grad()
-def test_step(model, data):
+def test_step(model, data, is_label_augment):
     model.eval()
 
     TimeRecorder.ctx.set_is_training(False)
@@ -56,7 +60,10 @@ def test_step(model, data):
     predict_result = []
     loss_result = []
 
-    propagation_mask = data["nodes_train_masks"]
+    if is_label_augment:
+        propagation_mask = data["nodes_train_masks"]
+    else:
+        propagation_mask = None
     # propagation_mask = torch.zeros(data["nodes_train_masks"].size(0)).bool()
     out = model(data["graph"], data["nodes_features"], data["nodes_labels"], propagation_mask)
 
@@ -88,7 +95,7 @@ def test_step(model, data):
 
     return train_acc, val_acc, test_acc, val_loss
 
-def train(model, data, optimizer, num_epochs, num_bits, checkpt_file=None):
+def train(model, data, optimizer, num_epochs, num_bits, is_label_augment, checkpt_file=None):
     rank = dist.get_rank()
     world_size = dist.get_world_size()
     # start training
@@ -97,7 +104,10 @@ def train(model, data, optimizer, num_epochs, num_bits, checkpt_file=None):
     total_update_weight_dur = 0.0
     total_training_dur = 0.0
 
-    label_rate = 0.62
+    if is_label_augment:
+        label_rate = 0.62
+    else:
+        label_rate = 0.0
 
     best_val_loss = 9999999.0
     best_test_acc = 0.0
@@ -115,12 +125,12 @@ def train(model, data, optimizer, num_epochs, num_bits, checkpt_file=None):
     print(f'data[nodes_train_masks] = {data["nodes_train_masks"]}')
 
     # with profile(activities=[ProfilerActivity.CPU]) as prof:
-    dist.barrier()
     for epoch in range(num_epochs):
+        dist.barrier()
         train_begin = time.perf_counter()
         train_loss = train_step(model, data, optimizer, epoch, num_train_nodes, label_rate)
         train_end = time.perf_counter()
-        train_acc, val_acc, test_acc, val_loss = test_step(model, data)
+        train_acc, val_acc, test_acc, val_loss = test_step(model, data, is_label_augment)
         
         print("Rank: {}, Epoch: {}, Train loss: {:.5f}, Val loss: {:.5f}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}, Time: {:.6f}".format(
             rank, epoch, train_loss, val_loss, train_acc, val_acc, test_acc, train_end - train_begin), flush=True)
@@ -139,7 +149,7 @@ def train(model, data, optimizer, num_epochs, num_bits, checkpt_file=None):
         
     # Logger.ctx.print_forward_backward_perf(total_forward_dur, total_backward_dur, total_update_weight_dur, total_training_dur)
 
-def test(model, data, checkpt_file):
+def test(model, data, is_label_augment, checkpt_file):
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
@@ -147,7 +157,7 @@ def test(model, data, checkpt_file):
     dist.barrier()
 
     model.load_state_dict(torch.load(checkpt_file))
-    train_acc, val_acc, test_acc, val_loss = test_step(model, data)
+    train_acc, val_acc, test_acc, val_loss = test_step(model, data, is_label_augment)
 
     if rank == 0:
         print("Final res | World size: {}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}".format(
@@ -157,7 +167,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="config.yaml")
     parser.add_argument("--num_bits", type=int, default=32)
+    # parser.add_argument("--is_pre_delay", action="store_true", default=False)
+    # parser.add_argument("--is_label_augment", action="store_true", default=False)
     parser.add_argument("--is_pre_delay", type=str, default="false")
+    parser.add_argument("--is_label_augment", type=str, default="false")
     args = parser.parse_args()
     with open(args.config) as f:
         config = yaml.safe_load(f)
@@ -165,6 +178,9 @@ if __name__ == "__main__":
     # config['is_fp16'] = True if args.is_fp16 == 'true' else False
     config["num_bits"] = args.num_bits
     config["is_pre_delay"] = True if args.is_pre_delay == "true" else False
+    config["is_label_augment"] = True if args.is_label_augment == "true" else False
+    # config["is_pre_delay"] = args.is_pre_delay
+    # config["is_label_augment"] = args.is_label_augment
 
     # print(config, flush=True)
 
@@ -204,9 +220,9 @@ if __name__ == "__main__":
     print("config: {}".format(config), flush=True)
 
     # print("finish data loading.", flush=True)
-    train(model, data, optimizer, config["num_epochs"], config["num_bits"], checkpt_file)
+    train(model, data, optimizer, config["num_epochs"], config["num_bits"], config["is_label_augment"], checkpt_file)
 
-    test(model, data, checkpt_file)
+    test(model, data, config["is_label_augment"], checkpt_file)
 
     TimeRecorder.ctx.print_total_time()
     # TimeRecorder.ctx.save_time_to_file(config["graph_name"], world_size)
