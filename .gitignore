@@ -173,6 +173,8 @@ cython_debug/
 
 # log files
 /log
+stdout.*
+stderr.*
 
 # npy files
 *.npy

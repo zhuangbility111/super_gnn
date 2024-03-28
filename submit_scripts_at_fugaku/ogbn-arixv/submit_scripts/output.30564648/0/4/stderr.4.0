@@ -1,33 +1,0 @@
-/vol0004/ra000012/data/wahib/gnn/pytorch/scripts/fujitsu/fccbuild/lib/python3.9/site-packages/numpy-1.22.4+3.gcd007c4-py3.9-linux-aarch64.egg/numpy/core/getlimits.py:499: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
-  setattr(self, word, getattr(machar, word).flat[0])
-/vol0004/ra000012/data/wahib/gnn/pytorch/scripts/fujitsu/fccbuild/lib/python3.9/site-packages/numpy-1.22.4+3.gcd007c4-py3.9-linux-aarch64.egg/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
-  return self._float_to_str(self.smallest_subnormal)
-/vol0004/ra000012/data/wahib/gnn/pytorch/scripts/fujitsu/fccbuild/lib/python3.9/site-packages/numpy-1.22.4+3.gcd007c4-py3.9-linux-aarch64.egg/numpy/core/getlimits.py:499: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
-  setattr(self, word, getattr(machar, word).flat[0])
-/vol0004/ra000012/data/wahib/gnn/pytorch/scripts/fujitsu/fccbuild/lib/python3.9/site-packages/numpy-1.22.4+3.gcd007c4-py3.9-linux-aarch64.egg/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
-  return self._float_to_str(self.smallest_subnormal)
-wandb: Currently logged in as: zhuangbility111. Use `wandb login --relogin` to force relogin
-wandb: Tracking run with wandb version 0.16.2
-wandb: Run data is saved locally in /vol0004/ra000012/data/wahib/gnn/super_gnn/submit_scripts_at_fugaku/ogbn-arixv/submit_scripts/wandb/run-20240122_220145-nawl0n30
-wandb: Run `wandb offline` to turn off syncing.
-wandb: Syncing run undirected_arxiv_2
-wandb: ⭐️ View project at https://wandb.ai/zhuangbility111/supergnn_mlsys24
-wandb: 🚀 View run at https://wandb.ai/zhuangbility111/supergnn_mlsys24/runs/nawl0n30
-/vol0004/ra000012/data/wahib/gnn/pytorch/scripts/fujitsu/fccbuild/lib/python3.9/site-packages/super_gnn-0.1-py3.9.egg/super_gnn/ops/spmm_kernel.py:11: UserWarning: __floordiv__ is deprecated, and its behavior will change in a future version of pytorch. It currently rounds toward 0 (like the 'trunc' function NOT 'floor'). This results in incorrect rounding for negative values. To keep the current behavior, use torch.div(a, b, rounding_mode='trunc'), or for actual floor division, use torch.div(a, b, rounding_mode='floor').
-wandb: - 0.001 MB of 0.001 MB uploadedwandb: \ 0.001 MB of 0.001 MB uploadedwandb: | 0.001 MB of 0.001 MB uploadedwandb: / 0.001 MB of 0.001 MB uploadedwandb: - 0.001 MB of 0.001 MB uploadedwandb: \ 0.006 MB of 0.006 MB uploaded (0.002 MB deduped)wandb: | 0.759 MB of 0.879 MB uploaded (0.002 MB deduped)wandb: / 0.879 MB of 0.879 MB uploaded (0.002 MB deduped)wandb: 
-wandb: Run history:
-wandb: epoch_time ▁█▃▃▄▃▄▃▃▅▄▁▃▁▂▄▂▃▃▃▃▇▃▅▃▇▄▂▃▁▃▇▃▄▃▁▃▃▃▂
-wandb:   test_acc ▁▃▆▆▇▇▇▇████████████████████████████████
-wandb:  train_acc ▁▃▅▆▆▇▇▇▇▇▇▇▇███████████████████████████
-wandb:    val_acc ▁▃▅▆▇▇▇▇▇███████████████████████████████
-wandb: 
-wandb: Run summary:
-wandb: epoch_time 0.42217
-wandb:   test_acc 0.69823
-wandb:  train_acc 0.71974
-wandb:    val_acc 0.70778
-wandb: 
-wandb: 🚀 View run undirected_arxiv_2 at: https://wandb.ai/zhuangbility111/supergnn_mlsys24/runs/nawl0n30
-wandb: ️⚡ View job at https://wandb.ai/zhuangbility111/supergnn_mlsys24/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjEzMjYwMTE1Mg==/version_details/v1
-wandb: Synced 5 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
-wandb: Find logs at: ./wandb/run-20240122_220145-nawl0n30/logs
