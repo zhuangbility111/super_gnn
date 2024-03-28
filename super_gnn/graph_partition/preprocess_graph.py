@@ -7,7 +7,9 @@ from scipy.io import mmread
 import requests
 from ogb.nodeproppred import NodePropPredDataset
 from torch_geometric.datasets import Reddit
+from torch_geometric.utils import to_undirected
 
+from typing import List, Union
 
 class Graph(object):
     """
@@ -73,11 +75,18 @@ class Graph(object):
         np.save(os.path.join(out_dir, "{}_nodes_test_idx.npy".format(graph_name)), self.test_idx)
         print("save training, valid, test idx successfully.")
 
-    def process_edge_index(self):
+    def process_edge_index(self, is_undirected: bool = False):
         """
         to process edge index, remove self loop and duplicated edges
         """
         src_id, dst_id = self.edge_index
+        if is_undirected:
+            undirected_edge_index = to_undirected(torch.stack([torch.from_numpy(src_id), torch.from_numpy(dst_id)], dim=0))
+            del src_id, dst_id
+            import gc
+            gc.collect()
+            src_id = undirected_edge_index[0].numpy()
+            dst_id = undirected_edge_index[1].numpy()
         original_edge_id = np.arange(src_id.shape[0], dtype=np.int64)
         print("length of src_idx before removing self loop = {}".format(src_id.shape[0]))
 
@@ -110,6 +119,7 @@ class Graph(object):
 
         src_id = torch.from_numpy(src_id)
         dst_id = torch.from_numpy(dst_id)
+        # original_edge_id = torch.from_numpy(np.arange(src_id.shape[0], dtype=np.int64))
         original_edge_id = torch.from_numpy(original_edge_id)
         edge_type = torch.zeros(src_id.shape[0], dtype=torch.int64)
         edge_data = torch.stack([src_id, dst_id, original_edge_id, edge_type], 1)
@@ -152,6 +162,7 @@ class Graph(object):
         np.savetxt(
             os.path.join(out_dir, "{}_edges.txt".format(graph_name)), self.edge_data, fmt="%d", delimiter=" "
         )
+        print("save edge index successfully.")
 
         # save removed edge index
         np.savetxt(
@@ -177,6 +188,8 @@ class Graph(object):
         # train_idx will also be append to node weight
         node_train_idx = torch.zeros(self.num_nodes, dtype=torch.int64)
         node_train_idx[self.train_idx] = 1
+        if node_train_idx.sum() == 0:
+            node_train_idx[0] = 1
         node_weight.append(node_train_idx)
 
         # append the weight of each node to node_weight
@@ -199,6 +212,8 @@ class Graph(object):
             delimiter=" ",
         )
 
+        print("save nodes file successfully.")
+
     def save_stats(self, graph_name: str, out_dir: str):
         """
         to save graph stats to txt file for graph partitioning
@@ -209,6 +224,50 @@ class Graph(object):
             for i in graph_stats:
                 f.write(str(i))
                 f.write(" ")
+        
+        print("save graph stats successfully.")
+
+class HeteroGraph(object):
+    def __init__(
+        self,
+        edge_index: List[np.ndarray],
+        node_feat: Union[np.ndarray, None],
+        num_nodes: List[int],
+        node_label: np.ndarray,
+        train_idx: np.ndarray,
+        valid_idx: np.ndarray,
+        test_idx: np.ndarray,
+        subgraph_name: List[str],
+    ):
+        self.graphs = []
+        for i in range(len(edge_index)):
+            self.graphs.append(Graph(edge_index[i], node_feat, num_nodes[i], node_label, train_idx, valid_idx, test_idx))
+        self.subgraph_name = subgraph_name
+    
+    def save_nodes(self, graph_name: str, out_dir: str):
+        for i in range(len(self.graphs)):
+            self.graphs[i].save_nodes(graph_name + "_" + self.subgraph_name[i], out_dir)
+
+    def save_edge_index(self, graph_name: List[str], out_dir: str):
+        for i in range(len(self.graphs)):
+            self.graphs[i].save_edge_index(graph_name + "_" + self.subgraph_name[i], out_dir)
+
+    def save_stats(self, graph_name: List[str], out_dir: str):
+        for i in range(len(self.graphs)):
+            self.graphs[i].save_stats(graph_name + "_" + self.subgraph_name[i], out_dir)
+    
+    def save_node_feat(self, graph_name: str, out_dir: str):
+        None
+    
+    def save_node_label(self, graph_name: str, out_dir: str):
+        # only need to save the label of 1 subgraph as all subgraphs share the same label
+        # self.graphs[0].save_node_label(graph_name, out_dir)
+        None
+    
+    def save_node_mask(self, graph_name: str, out_dir: str):
+        # only need to save the mask of 1 subgraph as all subgraphs share the same mask
+        # self.graphs[0].save_node_mask(graph_name, out_dir)
+        None
 
 
 class DataLoader(object):
@@ -229,6 +288,81 @@ class DataLoader(object):
         data_mask = data.get_idx_split()
         train_idx, valid_idx, test_idx = data_mask["train"], data_mask["valid"], data_mask["test"]
         graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, test_idx)
+        return graph
+    
+    @staticmethod
+    def load_ogbn_mag_paper_citation(dataset: str, raw_dir: str) -> Graph:
+        from ogb.lsc import MAG240MDataset
+        dataset = MAG240MDataset(root=raw_dir)
+
+        print("Processing {} graph ...".format('paper_cites_paper'))
+
+        edge_index = dataset.edge_index('paper', 'cites', 'paper')
+        num_nodes = dataset.num_papers
+        node_label = dataset.paper_label
+        split_dict = dataset.get_idx_split()
+        train_idx = split_dict['train'] # numpy array storing indices of training paper nodes
+        valid_idx = split_dict['valid'] # numpy array storing indices of validation paper nodes
+        testdev_idx = split_dict['test-dev'] # numpy array storing indices of test-dev paper nodes
+        node_feat = dataset.paper_feat
+        graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, testdev_idx)
+        return graph
+    
+    @staticmethod
+    def load_ogbn_mag(dataset: str, raw_dir: str) -> Graph:
+        from ogb.lsc import MAG240MDataset
+        dataset = MAG240MDataset(root=raw_dir)
+
+        edge_index_list = []
+        num_nodes_list = []
+        subgraph_name_list = []
+
+        # # firsly, process the paper citation graph
+        # edge_index = dataset.edge_index('paper', 'cites', 'paper')
+        # # process edge index
+        # print("Processing edge index of {}...".format('paper_cites_paper'))
+        # edge_index_list.append(edge_index)
+        # subgraph_name_list.append('paper_cites_paper')
+        # num_nodes_list.append(dataset.num_papers) # total number of nodes in the subgraph
+        
+        # # then, process the author-paper graph
+        # print("processing edge index of {}...".format('author_writes_paper'))
+        # edge_index = dataset.edge_index('author', 'writes', 'paper')
+        # # node id of papers starts from 0, so we need to add the number of papers to the node id of authors
+        # edge_index[0] += dataset.num_papers
+        # edge_index_list.append(edge_index)
+        # subgraph_name_list.append('author_writes_paper')
+        # num_nodes_list.append(dataset.num_papers + dataset.num_authors) # total number of nodes in the subgraph
+
+        # lastly, process the autor-affiliation graph
+        print("Processing edge index of {}...".format('author_affiliated_with_institution'))
+        edge_index = dataset.edge_index('author', 'institution')
+        # node id of papers starts from 0, node id of authors starts from the number of papers
+        # so the node id of institutions start from the number of papers + the number of authors
+        # edge_index[0] += dataset.num_papers
+        # edge_index[1] += dataset.num_papers + dataset.num_authors
+        # node id of authors starts from 0 and node id of institutions starts from the number of authors
+        edge_index[1] += dataset.num_authors
+        edge_index_list.append(edge_index)
+        subgraph_name_list.append('author_institution')
+        # total number of nodes in the subgraph
+        # num_nodes_list.append(dataset.num_papers + dataset.num_authors + dataset.num_institutions)
+        num_nodes_list.append(dataset.num_authors + dataset.num_institutions)
+        # ---- process edge_index end ----
+
+        # ---- process dataset split start ----
+        split_dict = dataset.get_idx_split()
+        train_idx = split_dict['train'] # numpy array storing indices of training paper nodes
+        valid_idx = split_dict['valid'] # numpy array storing indices of validation paper nodes
+        testdev_idx = split_dict['test-dev'] # numpy array storing indices of test-dev paper nodes
+        # ---- process dataset split end ----
+
+        # ---- process node label start ----
+        label = dataset.paper_label
+        # ---- process node label end ----
+
+        # no need to process node features, as it is already processed in the original dataset
+        graph = HeteroGraph(edge_index_list, None, num_nodes_list, label, train_idx, valid_idx, testdev_idx, subgraph_name_list)
         return graph
 
     @staticmethod
@@ -343,7 +477,12 @@ if __name__ == "__main__":
 
     # load graph
     if dataset[:4] == "ogbn":
-        graph = DataLoader.load_ogbn_dataset(dataset, raw_dir)
+        if dataset == "ogbn-mag240M":
+            # graph = DataLoader.load_ogbn_mag(dataset, raw_dir)
+            graph = DataLoader.load_ogbn_mag_paper_citation(dataset, raw_dir)
+            graph_name = dataset + "_paper_cites_paper"
+        else:
+            graph = DataLoader.load_ogbn_dataset(dataset, raw_dir)
     elif dataset == "reddit":
         graph = DataLoader.load_reddit_dataset(raw_dir)
     elif dataset == "proteins":
