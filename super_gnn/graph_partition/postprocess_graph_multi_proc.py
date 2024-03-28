@@ -108,12 +108,12 @@ def save_edge_index(
 
 
 def split_nodes_feats(
-    in_raw_dir: str, in_partition_dir: str, out_dir: str, graph_name: str, begin_part: int, end_part: int
+    in_raw_dir: str, in_partition_dir: str, out_dir: str, graph_name: str, begin_part: int, end_part: int, node_feats: np.ndarray
 ):
     """
     split the node ids, node feats, node labels and edge index into each partition
     """
-    node_feats = np.load(os.path.join(in_raw_dir, "{}_nodes_feat.npy".format(graph_name)))
+    # node_feats = np.load(os.path.join(in_raw_dir, "{}_nodes_feat.npy".format(graph_name)))
     node_labels = np.load(os.path.join(in_raw_dir, "{}_nodes_label.npy".format(graph_name)))
 
     for i in range(begin_part, end_part):
@@ -220,9 +220,14 @@ def split_node_datamask(
 
 
 def combined_func(
-    in_raw_dir: str, in_partition_dir: str, out_dir: str, graph_name: str, begin_part: int, end_part: int
+    in_raw_dir: str, in_partition_dir: str, out_dir: str, graph_name: str, begin_part: int, end_part: int, core_id: int, node_feats: np.ndarray
 ):
-    split_nodes_feats(in_raw_dir, in_partition_dir, out_dir, graph_name, begin_part, end_part)
+    pid = os.getpid()
+    # bind the process to a specific core
+    os.sched_setaffinity(pid, [core_id])
+    # get the current process id and the core id
+    print("The process id is: ", pid, " and the core id is: ", os.sched_getaffinity(pid), flush=True)
+    split_nodes_feats(in_raw_dir, in_partition_dir, out_dir, graph_name, begin_part, end_part, node_feats)
     split_node_datamask(in_raw_dir, in_partition_dir, out_dir, graph_name, begin_part, end_part)
 
 
@@ -250,6 +255,10 @@ if __name__ == "__main__":
     step = int((end_part - begin_part + num_process - 1) / num_process)
     process_list = []
 
+    # load the node_feats first, so that all process can share the same node_feats
+    node_feats = np.load(os.path.join(in_raw_dir, "{}_nodes_feat.npy".format(graph_name)))
+    print("load node_feats over!!!")
+
     for pid in range(num_process):
         p = Process(
             target=combined_func,
@@ -260,6 +269,8 @@ if __name__ == "__main__":
                 graph_name,
                 begin_part + pid * step,
                 min((begin_part + (pid + 1) * step), end_part),
+                pid,
+                node_feats
             ),
         )
         p.start()
