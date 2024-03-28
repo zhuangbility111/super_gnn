@@ -10,6 +10,7 @@ from super_gnn.data_manager import DistributedGraph, DistributedGraphForPre
 from super_gnn.data_manager import DataProcessor, DataProcessorForPreAggresive
 from super_gnn.data_manager import CommBuffer, CommBufferForQuantization
 from super_gnn.data_manager import CommSplits
+from super_gnn.data_manager.VertexCoverFinder import VertexCoverFinder
 import os
 
 
@@ -55,6 +56,8 @@ def load_nodes_labels(input_dir, graph_name, rank):
 def load_nodes_features(input_dir, graph_name, rank):
     # load features of vertices on subgraph
     nodes_feat_list = np.load(os.path.join(input_dir, "p{:0>3d}-{}_nodes_feat.npy".format(rank, graph_name)))
+    if nodes_feat_list.dtype == np.float16:
+        nodes_feat_list = nodes_feat_list.astype(np.float32)
     return torch.from_numpy(nodes_feat_list)
 
 
@@ -108,7 +111,7 @@ def get_distributed_graph(
     comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
     comm_buf_for_quantization = None
 
-    if bits == 2:
+    if bits == 2 or bits == 4 or bits == 8:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
 
     distributed_graph = DistributedGraph(
@@ -167,11 +170,22 @@ def get_distributed_graph_for_pre_aggressive(
         nodes_range_on_each_subgraph[rank],
     )
 
+    def check_comm_volume(pre_post_aggr_from_splits, pre_post_aggr_to_splits):
+        send_volume = 0
+        recv_volume = 0
+        for i in range(world_size):
+            send_volume += pre_post_aggr_to_splits[i]
+            recv_volume += pre_post_aggr_from_splits[i]
+        return (send_volume, recv_volume)
+
     comm_splits = CommSplits(pre_post_aggr_from_splits, pre_post_aggr_to_splits, world_size, bits)
     comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
     comm_buf_for_quantization = None
 
-    if bits == 2:
+    send_volume, recv_volume = check_comm_volume(pre_post_aggr_from_splits, pre_post_aggr_to_splits)
+    print("rank = {}, send_volume = {}, recv_volume = {}".format(rank, send_volume, recv_volume))
+
+    if bits == 2 or bits == 4 or bits == 8:
         comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
 
     distributed_graph = DistributedGraphForPre(
@@ -223,6 +237,9 @@ def load_data(config):
     ) = load_graph_structures(input_dir, graph_name, rank)
 
     if is_pre_delay:
+        # create vertex cover finder for deciding pre or post aggregation
+        vertex_cover_file_list = [ os.path.join(input_dir, "p{:0>3d}-{}_to_p{:0>3d}_vertex_cover_set.npy".format(rank, graph_name, dst_rank)) for dst_rank in range(world_size)]
+        VertexCoverFinder(vertex_cover_file_list=vertex_cover_file_list)
         # distributed_graph = get_distributed_graph_for_pre(local_edges_list, remote_edges_list, nodes_range_on_each_subgraph, \
         #                                                     num_local_nodes, max_feat_len, rank, world_size, is_fp16)
         distributed_graph = get_distributed_graph_for_pre_aggressive(

@@ -7,7 +7,7 @@ class CommSplits(object):
     def __init__(self, recv_splits: list, send_splits: list, world_size: int, bits: int) -> None:
         self.recv_splits = recv_splits
         self.send_splits = send_splits
-        if bits == 2:
+        if bits == 2 or bits == 4 or bits == 8:
             self.recv_splits_int2 = list()
             self.send_splits_int2 = list()
             for rank in range(world_size):

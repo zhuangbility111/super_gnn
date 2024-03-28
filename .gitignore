@@ -180,3 +180,7 @@ cython_debug/
 # model files
 pretrained/
 *.pt
+wandb/
+
+# xlsx files
+*.xlsx

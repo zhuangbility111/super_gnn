@@ -18,9 +18,8 @@ using namespace std;
 
 #define QUANTIZED_PARAMS_SIZE 2
 
-void divide_work_v1(int *work_range_per_proc, vector<list<int>> &work_list_fp32, vector<list<int>> &work_list_int8, int num_threads, int num_procs)
+void divide_work_v1(int *work_range_per_proc, vector<list<int>> &work_list_fp32, vector<list<int>> &work_list_int8, int num_threads, int num_procs, const int ELEMS_PER_BYTE)
 {
-    const int ELEMS_PER_BYTE = 4;
     int chunk_size;
     int cur_proc = 0;
     int begin_vertex_idx_fp32 = 0;
@@ -77,8 +76,9 @@ void divide_work_v1(int *work_range_per_proc, vector<list<int>> &work_list_fp32,
     }
 }
 
+template <int BITS>
 void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8_t *output_ptr,
-                            int row_begin_fp32, int row_end_fp32, int row_begin_int8, int feat_len, const int ELEMS_PER_BYTE, const int BITS)
+                            int row_begin_fp32, int row_end_fp32, int row_begin_int8, int feat_len, const int ELEMS_PER_BYTE)
 {
     int num_rows = row_end_fp32 - row_begin_fp32;
 
@@ -119,52 +119,109 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
             svbool_t pg_f32 = svwhilelt_b32(j, feat_len);
             svuint32_t v_res = svdup_n_u32(0);
 
-            svfloat32_t v_input_0 = svld1(pg_f32, input_ptr + (row_idx)*feat_len + j);
-            svfloat32_t v_input_1 = svld1(pg_f32, input_ptr + (row_idx + 1) * feat_len + j);
-            svfloat32_t v_input_2 = svld1(pg_f32, input_ptr + (row_idx + 2) * feat_len + j);
-            svfloat32_t v_input_3 = svld1(pg_f32, input_ptr + (row_idx + 3) * feat_len + j);
+            if (BITS == 2) 
+            {
+                svfloat32_t v_input_0 = svld1(pg_f32, input_ptr + (row_idx)*feat_len + j);
+                svfloat32_t v_input_1 = svld1(pg_f32, input_ptr + (row_idx + 1) * feat_len + j);
+                svfloat32_t v_input_2 = svld1(pg_f32, input_ptr + (row_idx + 2) * feat_len + j);
+                svfloat32_t v_input_3 = svld1(pg_f32, input_ptr + (row_idx + 3) * feat_len + j);
 
-            int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
+                int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
 
-            __builtin_prefetch(&(input_ptr[(row_idx + 8) * feat_len]), 0, 3);
-            __builtin_prefetch(&(input_ptr[(row_idx + 9) * feat_len]), 0, 3);
-            __builtin_prefetch(&(input_ptr[(row_idx + 10) * feat_len]), 0, 3);
-            __builtin_prefetch(&(input_ptr[(row_idx + 11) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 8) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 9) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 10) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 11) * feat_len]), 0, 3);
 
-            svfloat32_t v_zero_point_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx]);
-            svfloat32_t v_scale_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 1]);
-            svfloat32_t v_zero_point_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 2]);
-            svfloat32_t v_scale_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 3]);
-            svfloat32_t v_zero_point_2 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 4]);
-            svfloat32_t v_scale_2 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 5]);
-            svfloat32_t v_zero_point_3 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 6]);
-            svfloat32_t v_scale_3 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 7]);
+                svfloat32_t v_zero_point_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx]);
+                svfloat32_t v_scale_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 1]);
+                svfloat32_t v_zero_point_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 2]);
+                svfloat32_t v_scale_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 3]);
+                svfloat32_t v_zero_point_2 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 4]);
+                svfloat32_t v_scale_2 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 5]);
+                svfloat32_t v_zero_point_3 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 6]);
+                svfloat32_t v_scale_3 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 7]);
 
-            svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
-            svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
-            svfloat32_t v_quantized_2 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_2, v_zero_point_2), v_scale_2);
-            svfloat32_t v_quantized_3 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_3, v_zero_point_3), v_scale_3);
+                svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+                svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
+                svfloat32_t v_quantized_2 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_2, v_zero_point_2), v_scale_2);
+                svfloat32_t v_quantized_3 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_3, v_zero_point_3), v_scale_3);
 
-            v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
-            v_quantized_1 = svrintn_f32_z(pg_f32, v_quantized_1);
-            v_quantized_2 = svrintn_f32_z(pg_f32, v_quantized_2);
-            v_quantized_3 = svrintn_f32_z(pg_f32, v_quantized_3);
+                v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
+                v_quantized_1 = svrintn_f32_z(pg_f32, v_quantized_1);
+                v_quantized_2 = svrintn_f32_z(pg_f32, v_quantized_2);
+                v_quantized_3 = svrintn_f32_z(pg_f32, v_quantized_3);
 
-            svuint32_t v_int_quantized_0 = svcvt_u32_f32_z(pg_f32, v_quantized_0);
-            svuint32_t v_int_quantized_1 = svcvt_u32_f32_z(pg_f32, v_quantized_1);
-            svuint32_t v_int_quantized_2 = svcvt_u32_f32_z(pg_f32, v_quantized_2);
-            svuint32_t v_int_quantized_3 = svcvt_u32_f32_z(pg_f32, v_quantized_3);
+                svuint32_t v_int_quantized_0 = svcvt_u32_f32_z(pg_f32, v_quantized_0);
+                svuint32_t v_int_quantized_1 = svcvt_u32_f32_z(pg_f32, v_quantized_1);
+                svuint32_t v_int_quantized_2 = svcvt_u32_f32_z(pg_f32, v_quantized_2);
+                svuint32_t v_int_quantized_3 = svcvt_u32_f32_z(pg_f32, v_quantized_3);
 
-            v_int_quantized_0 = svlsl_n_u32_z(pg_f32, v_int_quantized_0, (ELEMS_PER_BYTE - 1) * BITS);
-            v_int_quantized_1 = svlsl_n_u32_z(pg_f32, v_int_quantized_1, (ELEMS_PER_BYTE - 2) * BITS);
-            v_int_quantized_2 = svlsl_n_u32_z(pg_f32, v_int_quantized_2, (ELEMS_PER_BYTE - 3) * BITS);
-            v_int_quantized_3 = svlsl_n_u32_z(pg_f32, v_int_quantized_3, (ELEMS_PER_BYTE - 4) * BITS);
+                v_int_quantized_0 = svlsl_n_u32_z(pg_f32, v_int_quantized_0, (ELEMS_PER_BYTE - 1) * BITS);
+                v_int_quantized_1 = svlsl_n_u32_z(pg_f32, v_int_quantized_1, (ELEMS_PER_BYTE - 2) * BITS);
+                v_int_quantized_2 = svlsl_n_u32_z(pg_f32, v_int_quantized_2, (ELEMS_PER_BYTE - 3) * BITS);
+                v_int_quantized_3 = svlsl_n_u32_z(pg_f32, v_int_quantized_3, (ELEMS_PER_BYTE - 4) * BITS);
 
-            v_res = svorr_z(pg_f32, v_res, v_int_quantized_0);
-            v_res = svorr_z(pg_f32, v_res, v_int_quantized_1);
-            v_res = svorr_z(pg_f32, v_res, v_int_quantized_2);
-            v_res = svorr_z(pg_f32, v_res, v_int_quantized_3);
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_0);
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_1);
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_2);
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_3);
 
+            } else if (BITS == 4) 
+            {
+                svfloat32_t v_input_0 = svld1(pg_f32, input_ptr + (row_idx)*feat_len + j);
+                svfloat32_t v_input_1 = svld1(pg_f32, input_ptr + (row_idx + 1) * feat_len + j);
+
+                int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
+
+                __builtin_prefetch(&(input_ptr[(row_idx + 8) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 9) * feat_len]), 0, 3);
+
+                svfloat32_t v_zero_point_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx]);
+                svfloat32_t v_scale_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 1]);
+                svfloat32_t v_zero_point_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 2]);
+                svfloat32_t v_scale_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 3]);
+
+                svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+                svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
+
+                v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
+                v_quantized_1 = svrintn_f32_z(pg_f32, v_quantized_1);
+
+                svuint32_t v_int_quantized_0 = svcvt_u32_f32_z(pg_f32, v_quantized_0);
+                svuint32_t v_int_quantized_1 = svcvt_u32_f32_z(pg_f32, v_quantized_1);
+
+                v_int_quantized_0 = svlsl_n_u32_z(pg_f32, v_int_quantized_0, (ELEMS_PER_BYTE - 1) * BITS);
+                v_int_quantized_1 = svlsl_n_u32_z(pg_f32, v_int_quantized_1, (ELEMS_PER_BYTE - 2) * BITS);
+
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_0);
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_1);
+
+            } else if (BITS == 8) 
+            {
+                svfloat32_t v_input_0 = svld1(pg_f32, input_ptr + (row_idx)*feat_len + j);
+
+                int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
+
+                __builtin_prefetch(&(input_ptr[(row_idx + 8) * feat_len]), 0, 3);
+
+                // get zero point and scale
+                svfloat32_t v_zero_point_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx]);
+                svfloat32_t v_scale_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 1]);
+                
+                // quantize
+                svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+
+                // round to the nearest integer
+                v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
+
+                // convert to unsigned int
+                svuint32_t v_int_quantized_0 = svcvt_u32_f32_z(pg_f32, v_quantized_0);
+
+                // or operation
+                v_res = svorr_z(pg_f32, v_res, v_int_quantized_0);
+            }
+                
             svst1b_u32(pg_f32, output_ptr + (row_begin_int8 + i / ELEMS_PER_BYTE) * feat_len + j, v_res);
         }
     }
@@ -216,8 +273,9 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
     }
 }
 
+template <int BITS>
 void dequantize_tensor_kernel(uint8_t *input_ptr, float *dequantized_params_ptr, float *output_ptr,
-                              int row_begin_fp32, int row_end_fp32, int row_begin_int8, int feat_len, const int ELEMS_PER_BYTE, const int BITS)
+                              int row_begin_fp32, int row_end_fp32, int row_begin_int8, int feat_len, const int ELEMS_PER_BYTE)
 {
     int num_rows = row_end_fp32 - row_begin_fp32;
 
@@ -233,41 +291,88 @@ void dequantize_tensor_kernel(uint8_t *input_ptr, float *dequantized_params_ptr,
             svbool_t pg_f32 = svwhilelt_b32(j, feat_len);
             svuint32_t v_packed_val = svld1ub_u32(pg_f32, input_ptr + (row_begin_int8 + i / ELEMS_PER_BYTE) * feat_len + j);
 
-            svuint32_t v_input_0 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 1) * BITS);
-            svuint32_t v_input_1 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 2) * BITS);
-            svuint32_t v_input_2 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 3) * BITS);
-            svuint32_t v_input_3 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 4) * BITS);
+            if (BITS == 2) 
+            {
+                svuint32_t v_input_0 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 1) * BITS);
+                svuint32_t v_input_1 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 2) * BITS);
+                svuint32_t v_input_2 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 3) * BITS);
+                svuint32_t v_input_3 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 4) * BITS);
 
-            v_input_0 = svand_z(pg_f32, v_input_0, v_mask);
-            v_input_1 = svand_z(pg_f32, v_input_1, v_mask);
-            v_input_2 = svand_z(pg_f32, v_input_2, v_mask);
-            v_input_3 = svand_z(pg_f32, v_input_3, v_mask);
+                v_input_0 = svand_z(pg_f32, v_input_0, v_mask);
+                v_input_1 = svand_z(pg_f32, v_input_1, v_mask);
+                v_input_2 = svand_z(pg_f32, v_input_2, v_mask);
+                v_input_3 = svand_z(pg_f32, v_input_3, v_mask);
 
-            int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
+                int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
 
-            svfloat32_t v_zero_point_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx]);
-            svfloat32_t v_scale_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 1]);
-            svfloat32_t v_zero_point_1 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 2]);
-            svfloat32_t v_scale_1 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 3]);
-            svfloat32_t v_zero_point_2 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 4]);
-            svfloat32_t v_scale_2 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 5]);
-            svfloat32_t v_zero_point_3 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 6]);
-            svfloat32_t v_scale_3 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 7]);
+                svfloat32_t v_zero_point_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx]);
+                svfloat32_t v_scale_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 1]);
+                svfloat32_t v_zero_point_1 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 2]);
+                svfloat32_t v_scale_1 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 3]);
+                svfloat32_t v_zero_point_2 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 4]);
+                svfloat32_t v_scale_2 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 5]);
+                svfloat32_t v_zero_point_3 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 6]);
+                svfloat32_t v_scale_3 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 7]);
 
-            svfloat32_t v_dequantized_0 = svcvt_f32_u32_z(pg_f32, v_input_0);
-            svfloat32_t v_dequantized_1 = svcvt_f32_u32_z(pg_f32, v_input_1);
-            svfloat32_t v_dequantized_2 = svcvt_f32_u32_z(pg_f32, v_input_2);
-            svfloat32_t v_dequantized_3 = svcvt_f32_u32_z(pg_f32, v_input_3);
+                svfloat32_t v_dequantized_0 = svcvt_f32_u32_z(pg_f32, v_input_0);
+                svfloat32_t v_dequantized_1 = svcvt_f32_u32_z(pg_f32, v_input_1);
+                svfloat32_t v_dequantized_2 = svcvt_f32_u32_z(pg_f32, v_input_2);
+                svfloat32_t v_dequantized_3 = svcvt_f32_u32_z(pg_f32, v_input_3);
 
-            v_dequantized_0 = svmla_f32_z(pg_f32, v_zero_point_0, v_dequantized_0, v_scale_0);
-            v_dequantized_1 = svmla_f32_z(pg_f32, v_zero_point_1, v_dequantized_1, v_scale_1);
-            v_dequantized_2 = svmla_f32_z(pg_f32, v_zero_point_2, v_dequantized_2, v_scale_2);
-            v_dequantized_3 = svmla_f32_z(pg_f32, v_zero_point_3, v_dequantized_3, v_scale_3);
+                v_dequantized_0 = svmla_f32_z(pg_f32, v_zero_point_0, v_dequantized_0, v_scale_0);
+                v_dequantized_1 = svmla_f32_z(pg_f32, v_zero_point_1, v_dequantized_1, v_scale_1);
+                v_dequantized_2 = svmla_f32_z(pg_f32, v_zero_point_2, v_dequantized_2, v_scale_2);
+                v_dequantized_3 = svmla_f32_z(pg_f32, v_zero_point_3, v_dequantized_3, v_scale_3);
 
-            svst1_f32(pg_f32, output_ptr + (row_idx)*feat_len + j, v_dequantized_0);
-            svst1_f32(pg_f32, output_ptr + (row_idx + 1) * feat_len + j, v_dequantized_1);
-            svst1_f32(pg_f32, output_ptr + (row_idx + 2) * feat_len + j, v_dequantized_2);
-            svst1_f32(pg_f32, output_ptr + (row_idx + 3) * feat_len + j, v_dequantized_3);
+                svst1_f32(pg_f32, output_ptr + (row_idx)*feat_len + j, v_dequantized_0);
+                svst1_f32(pg_f32, output_ptr + (row_idx + 1) * feat_len + j, v_dequantized_1);
+                svst1_f32(pg_f32, output_ptr + (row_idx + 2) * feat_len + j, v_dequantized_2);
+                svst1_f32(pg_f32, output_ptr + (row_idx + 3) * feat_len + j, v_dequantized_3);
+                
+            } else if (BITS == 4) 
+            {
+                svuint32_t v_input_0 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 1) * BITS);
+                svuint32_t v_input_1 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 2) * BITS);
+
+                v_input_0 = svand_z(pg_f32, v_input_0, v_mask);
+                v_input_1 = svand_z(pg_f32, v_input_1, v_mask);
+
+                int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
+
+                svfloat32_t v_zero_point_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx]);
+                svfloat32_t v_scale_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 1]);
+                svfloat32_t v_zero_point_1 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 2]);
+                svfloat32_t v_scale_1 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 3]);
+
+                svfloat32_t v_dequantized_0 = svcvt_f32_u32_z(pg_f32, v_input_0);
+                svfloat32_t v_dequantized_1 = svcvt_f32_u32_z(pg_f32, v_input_1);
+
+                v_dequantized_0 = svmla_f32_z(pg_f32, v_zero_point_0, v_dequantized_0, v_scale_0);
+                v_dequantized_1 = svmla_f32_z(pg_f32, v_zero_point_1, v_dequantized_1, v_scale_1);
+
+                svst1_f32(pg_f32, output_ptr + (row_idx)*feat_len + j, v_dequantized_0);
+                svst1_f32(pg_f32, output_ptr + (row_idx + 1) * feat_len + j, v_dequantized_1);
+
+            } else if (BITS == 8) 
+            {
+                svuint32_t v_input_0 = svlsr_n_u32_z(pg_f32, v_packed_val, (ELEMS_PER_BYTE - 1) * BITS);
+
+                int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
+
+                // get zero point and scale
+                svfloat32_t v_zero_point_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx]);
+                svfloat32_t v_scale_0 = svdup_n_f32(dequantized_params_ptr[quantized_params_idx + 1]);
+
+                // convert to float
+                svfloat32_t v_dequantized_0 = svcvt_f32_u32_z(pg_f32, v_input_0);
+
+                // dequantize
+                v_dequantized_0 = svmla_f32_z(pg_f32, v_zero_point_0, v_dequantized_0, v_scale_0);
+
+                // store
+                svst1_f32(pg_f32, output_ptr + (row_idx)*feat_len + j, v_dequantized_0);
+            }
+            
         }
     }
 
@@ -325,7 +430,7 @@ void quantize_tensor(Tensor input, Tensor output, Tensor quantized_params, int b
         int tid = omp_get_thread_num();
         int row_begin = work_range[tid] * ELEMS_PER_BYTE;
         int row_end = std::min(work_range[tid + 1] * ELEMS_PER_BYTE, vertex_num);
-        quantize_tensor_kernel(input_ptr, quantized_params_ptr, output_ptr, row_begin, row_end, row_begin / ELEMS_PER_BYTE, feat_len, ELEMS_PER_BYTE, BITS);
+        quantize_tensor_kernel<BITS>(input_ptr, quantized_params_ptr, output_ptr, row_begin, row_end, row_begin / ELEMS_PER_BYTE, feat_len, ELEMS_PER_BYTE);
     }
 
     delete[] work_range;
@@ -355,7 +460,7 @@ void dequantize_tensor(Tensor input, Tensor output, Tensor dequantized_params, i
         int tid = omp_get_thread_num();
         int row_begin = work_range[tid] * ELEMS_PER_BYTE;
         int row_end = std::min(work_range[tid + 1] * ELEMS_PER_BYTE, vertex_num);
-        dequantize_tensor_kernel(input_ptr, dequantized_params_ptr, output_ptr, row_begin, row_end, row_begin / ELEMS_PER_BYTE, feat_len, ELEMS_PER_BYTE, BITS);
+        dequantize_tensor_kernel<BITS>(input_ptr, dequantized_params_ptr, output_ptr, row_begin, row_end, row_begin / ELEMS_PER_BYTE, feat_len, ELEMS_PER_BYTE);
     }
 
     delete[] work_range;
@@ -377,13 +482,24 @@ void quantize_tensor_for_all_procs(Tensor input, Tensor output, Tensor quantized
     int *work_range_per_proc_ptr = work_range_per_proc.data_ptr<int>();
 
     // int elems_per_byte = 8 / bits;
-    const int ELEMS_PER_BYTE = 4;
-    const int BITS = 2;
+    // const int ELEMS_PER_BYTE = 4;
+    // const int BITS = 2;
+    const int BITS = bits;
+    const int ELEMS_PER_BYTE = 8 / BITS;
 
     int max_num_threads = omp_get_max_threads();
     vector<list<int>> work_list_fp32(max_num_threads);
     vector<list<int>> work_list_int8(max_num_threads);
-    divide_work_v1(work_range_per_proc_ptr, work_list_fp32, work_list_int8, max_num_threads, num_procs);
+    divide_work_v1(work_range_per_proc_ptr, work_list_fp32, work_list_int8, max_num_threads, num_procs, ELEMS_PER_BYTE);
+
+    // get kernel function pointer
+    void (*quantize_tensor_kernel_ptr)(float *, float *, uint8_t *, int, int, int, int, const int);
+    if (BITS == 2)
+        quantize_tensor_kernel_ptr = quantize_tensor_kernel<2>;
+    else if (BITS == 4)
+        quantize_tensor_kernel_ptr = quantize_tensor_kernel<4>;
+    else if (BITS == 8)
+        quantize_tensor_kernel_ptr = quantize_tensor_kernel<8>;
 
 	/*
     cout << "work_list_fp32: " << endl;
@@ -428,7 +544,7 @@ void quantize_tensor_for_all_procs(Tensor input, Tensor output, Tensor quantized
                 int row_end_fp32 = *end_it_fp32;
                 int row_begin_int8 = *begin_it_int8;
                 // int row_end_int8 = *end_it_int8;
-                quantize_tensor_kernel(input_ptr, quantized_params_ptr, output_ptr, row_begin_fp32, row_end_fp32, row_begin_int8, feat_len, ELEMS_PER_BYTE, BITS);
+                quantize_tensor_kernel_ptr(input_ptr, quantized_params_ptr, output_ptr, row_begin_fp32, row_end_fp32, row_begin_int8, feat_len, ELEMS_PER_BYTE);
             }
         }
     }
@@ -447,13 +563,24 @@ void dequantize_tensor_for_all_procs(Tensor input, Tensor output, Tensor dequant
     int vertex_num = output.size(0);
     int feat_len = output.size(1);
 
-    const int BITS = 2;
-    const int ELEMS_PER_BYTE = 4;
+    // const int BITS = 2;
+    // const int ELEMS_PER_BYTE = 4;
+    const int BITS = bits;
+    const int ELEMS_PER_BYTE = 8 / BITS;
 
     int max_num_threads = omp_get_max_threads();
     vector<list<int>> work_list_fp32(max_num_threads);
     vector<list<int>> work_list_int8(max_num_threads);
-    divide_work_v1(work_range_per_proc_ptr, work_list_fp32, work_list_int8, max_num_threads, num_procs);
+    divide_work_v1(work_range_per_proc_ptr, work_list_fp32, work_list_int8, max_num_threads, num_procs, ELEMS_PER_BYTE);
+
+    // get kernel function pointer
+    void (*dequantize_tensor_kernel_ptr)(uint8_t *, float *, float *, int, int, int, int, const int);
+    if (BITS == 2)
+        dequantize_tensor_kernel_ptr = dequantize_tensor_kernel<2>;
+    else if (BITS == 4)
+        dequantize_tensor_kernel_ptr = dequantize_tensor_kernel<4>;
+    else if (BITS == 8)
+        dequantize_tensor_kernel_ptr = dequantize_tensor_kernel<8>;
 
 #pragma omp parallel
     {
@@ -472,7 +599,7 @@ void dequantize_tensor_for_all_procs(Tensor input, Tensor output, Tensor dequant
                 int row_end_fp32 = *end_it_fp32;
                 int row_begin_int8 = *begin_it_int8;
                 // int row_end_int8 = *end_it_int8;
-                dequantize_tensor_kernel(input_ptr, dequantized_params_ptr, output_ptr, row_begin_fp32, row_end_fp32, row_begin_int8, feat_len, ELEMS_PER_BYTE, BITS);
+                dequantize_tensor_kernel_ptr(input_ptr, dequantized_params_ptr, output_ptr, row_begin_fp32, row_end_fp32, row_begin_int8, feat_len, ELEMS_PER_BYTE);
             }
         }
     }

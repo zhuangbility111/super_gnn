@@ -17,8 +17,32 @@ import yaml
 import copy
 
 
-def train_step(model, optimizer, labels, list_mat, train_mask, valid_mask, use_layer_norm, epoch):
+def avg_pred(output, labels, mask):
+    num_correct_samples = (
+            (output[mask].argmax(-1) == labels[mask]).sum() if mask.size(0) != 0 else 0
+        )
+    num_samples = mask.size(0)
+    pred_result = torch.tensor([num_correct_samples, num_samples], dtype=torch.int64)
+    if dist.get_world_size() > 1:
+        dist.all_reduce(pred_result, op=dist.ReduceOp.SUM)
+    avg_acc = float(pred_result[0]) / float(pred_result[1])
+    return avg_acc
+
+
+def avg_loss(loss, num_samples):
+    # check if the loss is a tensor which is nan
+    if torch.isnan(loss):
+            loss = torch.tensor(0.0)
+    loss_tensor = torch.tensor([loss.item(), num_samples])
+    if dist.get_world_size() > 1:
+        dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+    avg_loss = float(loss_tensor[0] / loss_tensor[1])
+    return avg_loss
+
+
+def train_step(model, optimizer, labels, list_mat, train_mask, use_layer_norm):
     model.train()
+    dist.barrier()
     train_begin = time.perf_counter()
     optimizer.zero_grad()
     output = model(list_mat, use_layer_norm)
@@ -27,29 +51,23 @@ def train_step(model, optimizer, labels, list_mat, train_mask, valid_mask, use_l
     optimizer.step()
     train_end = time.perf_counter()
     epoch_time = (train_end - train_begin) * 1000.0 # ms
-    Logger.ctx.print_acc_and_perf(model, output, labels, train_mask, valid_mask, loss_train, epoch, epoch_time)
+
+    # check accuracy
+    acc_train = avg_pred(output, labels, train_mask)
+    return loss_train, acc_train, epoch_time
 
 
-def check_model(model, labels, list_mat, valid_mask, use_layer_norm, best, bad_counter, checkpt_file):
+def valid_step(model, labels, list_mat, valid_mask, use_layer_norm, best, bad_counter, checkpt_file):
     # get validation loss
     model.eval()
     with torch.no_grad():
         output = model(list_mat, use_layer_norm)
-        loss_val = F.nll_loss(output[valid_mask], labels[valid_mask])
+        loss_val = F.nll_loss(output[valid_mask], labels[valid_mask], reduction="sum")
+        loss_val = avg_loss(loss_val, valid_mask.size(0))
 
-        if dist.get_world_size() > 1:
-            dist.all_reduce(loss_val, op=dist.ReduceOp.SUM)
-        avg_loss_val = float(loss_val.item() / dist.get_world_size())
-
-        if avg_loss_val < best:
-            best = avg_loss_val
-            if dist.get_rank() == 0:
-                torch.save(model.state_dict(), checkpt_file)
-            bad_counter = 0
-        else:
-            bad_counter += 1
-    
-    return bad_counter, best
+        # check accuracy
+        acc_val = avg_pred(output, labels, valid_mask)
+    return loss_val, acc_val
 
 
 def test_step(model, labels, list_mat, use_layer_norm, test_mask, checkpt_file):
@@ -57,16 +75,10 @@ def test_step(model, labels, list_mat, use_layer_norm, test_mask, checkpt_file):
     model.eval()
     with torch.no_grad():
         output = model(list_mat, use_layer_norm)
-        num_correct_samples = (
-            (output[test_mask].argmax(-1) == labels[test_mask]).sum() if test_mask.size(0) != 0 else 0
-        )
-        num_samples = test_mask.size(0)
-        predict_result = torch.tensor([num_correct_samples, num_samples])
-        if dist.get_world_size() > 1:
-            dist.all_reduce(predict_result, op=dist.ReduceOp.SUM)
-        acc_test = float(predict_result[0] / predict_result[1])
-        return acc_test
 
+        # check accuracy
+        acc_test = avg_pred(output, labels, test_mask)
+    return acc_test
 
 def train(config):
     # checkpt_file = 'pretrained/'+uuid.uuid4().hex+'.pt'
@@ -107,11 +119,35 @@ def train(config):
     bad_counter = 0
     best = 999999999
     for epoch in range(config["num_epochs"]):
-        train_step(model, optimizer, data["nodes_labels"], list_mat, 
-                   data["nodes_train_masks"], data["nodes_valid_masks"], config["layer_norm"], epoch)       
+        loss_train, acc_train, epoch_time = train_step(model, optimizer, data["nodes_labels"], list_mat, 
+                                    data["nodes_train_masks"], config["layer_norm"])
 
-        bad_counter, best = check_model(model, data["nodes_labels"], list_mat, data["nodes_valid_masks"], 
+        loss_val, acc_val = valid_step(model, data["nodes_labels"], list_mat, data["nodes_valid_masks"],
                                         config["layer_norm"], best, bad_counter, checkpt_file)
+
+        # bad_counter, best = check_model(model, data["nodes_labels"], list_mat, data["nodes_valid_masks"], 
+        #                                 config["layer_norm"], best, bad_counter, checkpt_file)
+
+        if rank == 0:
+            print('Rank: '.format(rank),
+                    'World_size: '.format(world_size),
+                    'Epoch:{:04d}'.format(epoch+1),
+                    'train',
+                    'loss:{:.3f}'.format(loss_train),
+                    'acc:{:.2f}'.format(acc_train*100),
+                    '| val',
+                    'loss:{:.3f}'.format(loss_val),
+                    'acc:{:.2f}'.format(acc_val*100),
+                    '| time:{:.4f} ms'.format(epoch_time))
+
+
+        if loss_val < best:
+            best = loss_val
+            if dist.get_rank() == 0:
+                torch.save(model.state_dict(), checkpt_file)
+            bad_counter = 0
+        else:
+            bad_counter += 1
 
         if bad_counter == config["patience"]:
             break
