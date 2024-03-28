@@ -225,15 +225,17 @@ if __name__ == "__main__":
 
     Quantizer_for_all_procs(world_size, config["num_bits"])
 
-    if (
-        config["graph_name"] != "arxiv"
-        and config["graph_name"] != "products"
-        and config["graph_name"] != "papers100M"
-        and config["graph_name"] != "mag240M_paper_cites_paper"
-    ):
-        config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size)
-    else:
-        config["input_dir"] += "ogbn_{}_{}_part/".format(config["graph_name"], world_size)
+    # if (
+    #     config["graph_name"] != "arxiv"
+    #     and config["graph_name"] != "products"
+    #     and config["graph_name"] != "papers100M"
+    #     and config["graph_name"] != "mag240M_paper_cites_paper"
+    # ):
+    #     config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size)
+    # else:
+    #     config["input_dir"] += "ogbn_{}_{}_part/".format(config["graph_name"], world_size)
+    config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size) 
+    
 
     set_random_seed(config["random_seed"])
     model, optimizer = create_model_and_optimizer(config)

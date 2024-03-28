@@ -1,7 +1,7 @@
 # input_dir: "../../../dataset/ogbn_papers100M_new/balanced_training_samples/"
 # input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/ogbn_papers100M_new/balanced_out_degree/"
 input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/ogbn_mag240M_paper_cites_paper_new/add_symmetric/"
-graph_name: "mag240M_paper_cites_paper"
+graph_name: "ogbn_mag240M_paper_cites_paper"
 model_name: "sage"
 in_channels: 768
 hidden_channels: 256
