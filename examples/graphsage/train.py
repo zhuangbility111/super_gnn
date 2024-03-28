@@ -76,7 +76,10 @@ def test_step(model, data, is_label_augment):
         predict_result.append(num_correct_samples)
         predict_result.append(num_samples)
 
-        loss = F.nll_loss(out[mask], data["nodes_labels"][mask], reduction="sum")
+        if torch.sum(data["nodes_labels"][mask] >= 0).item() == 0: # if there is no valid label
+            loss = torch.tensor([999999.0])
+        else:
+            loss = F.nll_loss(out[mask], data["nodes_labels"][mask], reduction="sum")
         loss_result.append(loss.item())
 
     predict_result = torch.tensor(predict_result)
@@ -109,7 +112,8 @@ def train(model, data, optimizer, num_epochs, num_bits, is_label_augment, checkp
     else:
         label_rate = 0.0
 
-    best_val_loss = 9999999.0
+    # best_val_loss = 9999999.0
+    best_val_loss = float("inf")
     best_test_acc = 0.0
 
     num_train_nodes = torch.tensor([data["nodes_train_masks"].size(0)], dtype=torch.int64)
@@ -162,6 +166,26 @@ def test(model, data, is_label_augment, checkpt_file):
     if rank == 0:
         print("Final res | World size: {}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}".format(
             world_size, train_acc, val_acc, test_acc), flush=True)
+        
+
+def read_model_params(config, args):
+    if args.hidden_channels is not None:
+        config["hidden_channels"] = args.hidden_channels
+    if args.num_layers is not None:
+        config["num_layers"] = args.num_layers
+    if args.dropout is not None:
+        config["dropout"] = args.dropout
+    if args.lr is not None:
+        config["lr"] = args.lr
+    if args.weight_decay is not None:
+        config["weight_decay"] = args.weight_decay
+    if args.num_epochs is not None:
+        config["num_epochs"] = args.num_epochs
+    if args.norm_type is not None:
+        if args.norm_type == "none":
+            config["norm_type"] = None
+            print("norm_type is None")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -171,6 +195,16 @@ if __name__ == "__main__":
     # parser.add_argument("--is_label_augment", action="store_true", default=False)
     parser.add_argument("--is_pre_delay", type=str, default="false")
     parser.add_argument("--is_label_augment", type=str, default="false")
+
+    # parameters for model
+    parser.add_argument("--hidden_channels", type=int)
+    parser.add_argument("--num_layers", type=int)
+    parser.add_argument("--dropout", type=float)
+    parser.add_argument("--lr", type=float)
+    parser.add_argument("--weight_decay", type=float)
+    parser.add_argument("--num_epochs", type=int)
+    parser.add_argument("--norm_type", type=str)
+
     args = parser.parse_args()
     with open(args.config) as f:
         config = yaml.safe_load(f)
@@ -181,6 +215,8 @@ if __name__ == "__main__":
     config["is_label_augment"] = True if args.is_label_augment == "true" else False
     # config["is_pre_delay"] = args.is_pre_delay
     # config["is_label_augment"] = args.is_label_augment
+
+    read_model_params(config, args)
 
     # print(config, flush=True)
 
@@ -193,6 +229,7 @@ if __name__ == "__main__":
         config["graph_name"] != "arxiv"
         and config["graph_name"] != "products"
         and config["graph_name"] != "papers100M"
+        and config["graph_name"] != "mag240M_paper_cites_paper"
     ):
         config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size)
     else:

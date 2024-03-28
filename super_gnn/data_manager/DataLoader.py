@@ -56,6 +56,8 @@ def load_nodes_labels(input_dir, graph_name, rank):
 def load_nodes_features(input_dir, graph_name, rank):
     # load features of vertices on subgraph
     nodes_feat_list = np.load(os.path.join(input_dir, "p{:0>3d}-{}_nodes_feat.npy".format(rank, graph_name)))
+    if nodes_feat_list.dtype == np.float16:
+        nodes_feat_list = nodes_feat_list.astype(np.float32)
     return torch.from_numpy(nodes_feat_list)
 
 
