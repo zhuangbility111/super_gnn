@@ -43,8 +43,9 @@ def generate_job_submission_script(num_mpi_processes, node_hours, graph_name, is
     script += "source ~/gnn/gnn/pytorch/config_env.sh\n"
     script += "graph_name={}\n".format(graph_name)
     # script += "dir_stdout=../log/barrier_with_no_asnyc_v1/${PJM_MPI_PROC}proc/\n"
-    script += "dir_stdout=../log/perf/${PJM_MPI_PROC}proc/\n"
-    script += "mkdir -p ${dir_stdout}"
+    script += "res_dir=../log/perf\n"
+    script += "mkdir -p ${res_dir}\n"
+    script += "dir_stdout=${res_dir}/${PJM_MPI_PROC}proc/\n"
 
     script += "\n"
     script += "tcmalloc_path=/home/ra000012/a04083/gnn/gnn/pytorch/scripts/fujitsu/lib/libtcmalloc.so\n"
@@ -98,7 +99,10 @@ elif graph_name == "ogbn-mag240M_paper_cites_paper":
 
 
 for i in range(len(num_mpi_processes_list)):
-    script = generate_job_submission_script(num_mpi_processes_list[i], node_hours_list[i], graph_name)
+    is_label_augment = False
+    if graph_name == "ogbn-papers100M" or graph_name == "ogbn-mag240M_paper_cites_paper":
+        is_label_augment = True
+    script = generate_job_submission_script(num_mpi_processes_list[i], node_hours_list[i], graph_name, is_label_augment)
     filename = os.path.join(output_dir, "run_{}_{}.sh".format(graph_name, num_mpi_processes_list[i]))
 
     with open(filename, "w") as f:
