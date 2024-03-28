@@ -26,6 +26,7 @@ class Graph(object):
         train_idx: np.ndarray,
         valid_idx: np.ndarray,
         test_idx: np.ndarray,
+        is_undirected: bool = False,
     ):
         self.edge_index = edge_index
         self.node_feat = node_feat
@@ -36,6 +37,7 @@ class Graph(object):
         self.train_idx = train_idx
         self.valid_idx = valid_idx
         self.test_idx = test_idx
+        self.is_undirected = is_undirected
 
     def get_in_degrees(self, local_edges_list, num_local_nodes):
         """
@@ -75,12 +77,12 @@ class Graph(object):
         np.save(os.path.join(out_dir, "{}_nodes_test_idx.npy".format(graph_name)), self.test_idx)
         print("save training, valid, test idx successfully.")
 
-    def process_edge_index(self, is_undirected: bool = False):
+    def process_edge_index(self):
         """
         to process edge index, remove self loop and duplicated edges
         """
         src_id, dst_id = self.edge_index
-        if is_undirected:
+        if self.is_undirected:
             undirected_edge_index = to_undirected(torch.stack([torch.from_numpy(src_id), torch.from_numpy(dst_id)], dim=0))
             del src_id, dst_id
             import gc
@@ -276,7 +278,7 @@ class DataLoader(object):
     """
 
     @staticmethod
-    def load_ogbn_dataset(dataset: str, raw_dir: str) -> Graph:
+    def load_ogbn_dataset(dataset: str, raw_dir: str, is_undirected: bool) -> Graph:
         """
         to download and load ogbn dataset, return the loaded graph and node labels
         """
@@ -287,11 +289,11 @@ class DataLoader(object):
         node_feat = graph["node_feat"]
         data_mask = data.get_idx_split()
         train_idx, valid_idx, test_idx = data_mask["train"], data_mask["valid"], data_mask["test"]
-        graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, test_idx)
+        graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, test_idx, is_undirected)
         return graph
     
     @staticmethod
-    def load_ogbn_mag_paper_citation(dataset: str, raw_dir: str) -> Graph:
+    def load_ogbn_mag_paper_citation(dataset: str, raw_dir: str, is_undirected: bool) -> Graph:
         from ogb.lsc import MAG240MDataset
         dataset = MAG240MDataset(root=raw_dir)
 
@@ -305,7 +307,7 @@ class DataLoader(object):
         valid_idx = split_dict['valid'] # numpy array storing indices of validation paper nodes
         testdev_idx = split_dict['test-dev'] # numpy array storing indices of test-dev paper nodes
         node_feat = dataset.paper_feat
-        graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, testdev_idx)
+        graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, testdev_idx, is_undirected)
         return graph
     
     @staticmethod
@@ -469,6 +471,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--raw_dir", type=str, default="./", help="The path of raw dataset directory.")
     parser.add_argument("--dataset", type=str, help="The name of input dataset.")
+    parser.add_argument("--is_undirected", action="store_true", help="Whether to convert the graph to undirected.")
     args = parser.parse_args()
     processed_dir = args.processed_dir
     raw_dir = args.raw_dir
@@ -479,10 +482,10 @@ if __name__ == "__main__":
     if dataset[:4] == "ogbn":
         if dataset == "ogbn-mag240M":
             # graph = DataLoader.load_ogbn_mag(dataset, raw_dir)
-            graph = DataLoader.load_ogbn_mag_paper_citation(dataset, raw_dir)
+            graph = DataLoader.load_ogbn_mag_paper_citation(dataset, raw_dir, is_undirected=args.is_undirected)
             graph_name = dataset + "_paper_cites_paper"
         else:
-            graph = DataLoader.load_ogbn_dataset(dataset, raw_dir)
+            graph = DataLoader.load_ogbn_dataset(dataset, raw_dir, is_undirected=args.is_undirected)
     elif dataset == "reddit":
         graph = DataLoader.load_reddit_dataset(raw_dir)
     elif dataset == "proteins":
