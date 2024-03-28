@@ -154,10 +154,11 @@ Inner_kernel get_kernel_1xN(int n) {
     return kernel_1xN<4>;
 }
 
-std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu(torch::Tensor rowptr, torch::Tensor col,
-                                                                   torch::optional<torch::Tensor> optional_value,
-                                                                   torch::Tensor mat, std::string reduce) {
-    auto other_start_time = system_clock::now();
+// std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu(torch::Tensor rowptr, torch::Tensor col,
+void spmm_cpu(torch::Tensor rowptr, torch::Tensor col,
+              torch::optional<torch::Tensor> optional_value,
+              torch::Tensor mat, torch::Tensor out, std::string reduce) {
+    // auto other_start_time = system_clock::now();
     CHECK_CPU(rowptr);
     CHECK_CPU(col);
     if (optional_value.has_value()) CHECK_CPU(optional_value.value());
@@ -175,7 +176,7 @@ std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu(torch::Tensor
 
     auto sizes = mat.sizes().vec();
     sizes[mat.dim() - 2] = rowptr.numel() - 1;
-    auto out = torch::empty(sizes, mat.options());
+    // auto out = torch::empty(sizes, mat.options());
 
     torch::optional<torch::Tensor> arg_out = torch::nullopt;
     int64_t* arg_out_data = nullptr;
@@ -194,7 +195,7 @@ std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu(torch::Tensor
     // duration<double, std::milli> diff_other = (system_clock::now() - other_start_time);
     // std::cout << "elapsed time of other part " << "(spmm on forward): " << diff_other.count() << std::endl;
 
-    auto start_time_1 = system_clock::now();
+    // auto start_time_1 = system_clock::now();
     AT_DISPATCH_ALL_TYPES_AND(at::ScalarType::Half, mat.scalar_type(), "_", [&] {
         scalar_t* value_data = nullptr;
         auto mat_data = mat.data_ptr<scalar_t>();
@@ -247,7 +248,7 @@ std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu(torch::Tensor
     // duration<double, std::milli> diff3 = (system_clock::now() - other_start_time);
     // std::cout << "original total time of SPMM:" << diff3.count() << std::endl;
 
-    return std::make_tuple(out, arg_out);
+    // return std::make_tuple(out, arg_out);
 }
 
 int obtain_tile_rowptr(int64_t* rowptr, int64_t* col, float* values, int rowptr_start, int rowptr_end, int* tile_rowptr,
@@ -324,7 +325,8 @@ Inner_kernel select_kernel(const int N, int& step, __mmask16& pg0, __mmask16& pg
 }
 #endif
 
-std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu_optimized_no_tile_v1(
+// std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu_optimized_no_tile_v1(
+void spmm_cpu_optimized_no_tile_v1(
     torch::Tensor rowptr, torch::Tensor col, torch::optional<torch::Tensor> optional_value, torch::Tensor mat,
     torch::Tensor out, int64_t sparse_rows, torch::Tensor parallel_row_split,
     torch::Tensor parallel_col_split) {
@@ -502,8 +504,8 @@ std::tuple<torch::Tensor, torch::optional<torch::Tensor>> spmm_cpu_optimized_no_
                   << ", dense_data_type: " << mat.scalar_type() << std::endl;
     }
 
-    torch::optional<torch::Tensor> arg_out = torch::nullopt;
-    return std::make_tuple(out, arg_out);
+    // torch::optional<torch::Tensor> arg_out = torch::nullopt;
+    // return std::make_tuple(out, arg_out);
 }
 
 torch::Tensor spmm_value_bw_cpu(torch::Tensor row, torch::Tensor rowptr, torch::Tensor col, torch::Tensor mat,
@@ -558,3 +560,19 @@ torch::Tensor spmm_value_bw_cpu(torch::Tensor row, torch::Tensor rowptr, torch::
 // PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 //     m.def("spmm", &spmm_cpu_optimized_no_tile_v1);
 // }
+
+void spmm(
+    torch::Tensor rowptr, torch::Tensor col, torch::optional<torch::Tensor> optional_value, torch::Tensor mat,
+    torch::Tensor out, int64_t sparse_rows, torch::Tensor parallel_row_split,
+    torch::Tensor parallel_col_split) {
+    int K = mat.size(-2);
+    int N = mat.size(-1);
+
+    float sparsity = float(col.size(0)) / sparse_rows / K;
+    if (sparsity <= 0.0001 && N > 256) {
+        spmm_cpu(rowptr, col, optional_value, mat, out, "sum");
+    } else {
+        spmm_cpu_optimized_no_tile_v1(rowptr, col, optional_value, mat, out, sparse_rows, parallel_row_split,
+                                      parallel_col_split);
+    }
+}

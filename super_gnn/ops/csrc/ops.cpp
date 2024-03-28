@@ -22,7 +22,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("quantize_tensor_v2_torch", &quantize_tensor_v2_torch);
     m.def("dequantize_tensor_v2_torch", &dequantize_tensor_v2_torch);
 #endif
-    m.def("spmm", &spmm_cpu_optimized_no_tile_v1);
+    m.def("spmm", &spmm);
 
     m.def("find_vertex_cover", &find_vertex_cover);
 }
