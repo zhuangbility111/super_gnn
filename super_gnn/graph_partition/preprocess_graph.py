@@ -476,14 +476,14 @@ if __name__ == "__main__":
     processed_dir = args.processed_dir
     raw_dir = args.raw_dir
     dataset = args.dataset
-    graph_name = dataset
+    graph_name = dataset.replace("-", "_")
 
     # load graph
     if dataset[:4] == "ogbn":
         if dataset == "ogbn-mag240M":
             # graph = DataLoader.load_ogbn_mag(dataset, raw_dir)
             graph = DataLoader.load_ogbn_mag_paper_citation(dataset, raw_dir, is_undirected=args.is_undirected)
-            graph_name = dataset + "_paper_cites_paper"
+            graph_name += "_paper_cites_paper"
         else:
             graph = DataLoader.load_ogbn_dataset(dataset, raw_dir, is_undirected=args.is_undirected)
     elif dataset == "reddit":
