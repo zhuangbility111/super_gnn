@@ -25,7 +25,7 @@ def create_model_and_optimizer(config: dict):
             config["dropout"],
             config["num_bits"],
             config["is_pre_delay"],
-            config["norm_type"],
+            config["norm_type"] if "norm_type" in config else None,
             config["is_label_augment"],
         )
 
