@@ -10,5 +10,4 @@ setup(
         'numpy',
     ],
     description='a distributed gnns training system for cpu supercomputers',
-    url='https://github.com/zhuangbility111/super_gnn',
 )
