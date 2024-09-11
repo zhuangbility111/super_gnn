@@ -9,6 +9,7 @@ test_level_partition/
 log
 *.out
 *.stats
+*.err
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -186,3 +187,6 @@ wandb/
 
 # xlsx files
 *.xlsx
+
+# vscode
+.vscode/

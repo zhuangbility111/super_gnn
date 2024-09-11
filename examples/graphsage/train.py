@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import argparse
 import time
 import yaml
-from utils import create_model_and_optimizer, set_random_seed
+from utils import create_model_and_optimizer, set_random_seed, gcn_normalize
 from super_gnn.communicator import Communicator
 from super_gnn.data_manager import load_data
 from super_gnn.assigner import Assigner
@@ -129,8 +129,9 @@ def train(model, data, optimizer, num_epochs, num_bits, is_label_augment, checkp
     print(f'data[nodes_train_masks] = {data["nodes_train_masks"]}')
 
     # with profile(activities=[ProfilerActivity.CPU]) as prof:
+    dist.barrier()
     for epoch in range(num_epochs):
-        dist.barrier()
+        # dist.barrier()
         train_begin = time.perf_counter()
         train_loss = train_step(model, data, optimizer, epoch, num_train_nodes, label_rate)
         train_end = time.perf_counter()
@@ -156,6 +157,8 @@ def train(model, data, optimizer, num_epochs, num_bits, is_label_augment, checkp
 def test(model, data, is_label_augment, checkpt_file):
     rank = dist.get_rank()
     world_size = dist.get_world_size()
+
+    print(f'data[nodes_test_masks] = {data["nodes_test_masks"]}')
 
     # synchronize all processes to make sure the model is saved
     dist.barrier()
@@ -225,23 +228,33 @@ if __name__ == "__main__":
 
     Quantizer_for_all_procs(world_size, config["num_bits"])
 
-    # if (
-    #     config["graph_name"] != "arxiv"
-    #     and config["graph_name"] != "products"
-    #     and config["graph_name"] != "papers100M"
-    #     and config["graph_name"] != "mag240M_paper_cites_paper"
-    # ):
-    #     config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size)
-    # else:
-    #     config["input_dir"] += "ogbn_{}_{}_part/".format(config["graph_name"], world_size)
-    config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size) 
+    if (
+        config["graph_name"] != "arxiv"
+        and config["graph_name"] != "products"
+        and config["graph_name"] != "papers100M"
+        and config["graph_name"] != "mag240M_paper_cites_paper"
+    ):
+        config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size)
+    else:
+        config["input_dir"] += "ogbn_{}_{}_part/".format(config["graph_name"], world_size)
+    # config["input_dir"] += "{}_{}_part/".format(config["graph_name"], world_size) 
     
 
     set_random_seed(config["random_seed"])
     model, optimizer = create_model_and_optimizer(config)
     data = load_data(config)
 
-    checkpt_file = "best_model_{}_{}_{}.pt".format(config["graph_name"], world_size, config["num_bits"])
+    pre_post_text = "pre_post" if config["is_pre_delay"] else "post"
+    checkpt_file = "best_model_{}_{}_{}_{}_label_propaga_{}.pt".format(config["graph_name"], world_size, config["num_bits"], pre_post_text, config["is_label_augment"])
+
+    if config["model_name"] == "gcn":
+        graph = data['graph']
+        # add self loop
+        graph.local_adj_t = graph.local_adj_t.fill_diag(1.0)
+
+        # gcn normalize
+        gcn_normalize(graph)
+
 
     Assigner(
         config["num_bits"],

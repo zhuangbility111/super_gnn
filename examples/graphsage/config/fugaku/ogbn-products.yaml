@@ -1,7 +1,8 @@
 # input_dir: "../../../dataset/ogbn_products_new/balanced_training_samples/"
 input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/ogbn_products_new/balanced_out_degree/"
-graph_name: "ogbn_products"
+graph_name: "products"
 model_name: "sage"
+# model_name: "gcn"
 in_channels: 100
 hidden_channels: 256
 out_channels: 47

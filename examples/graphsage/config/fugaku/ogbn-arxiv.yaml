@@ -1,7 +1,8 @@
 # input_dir: "../dataset/ogbn_arxiv_new/"
 input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/ogbn_arxiv_undirected/"
-graph_name: "ogbn_arxiv"
-model_name: "sage"
+graph_name: "arxiv"
+# model_name: "sage"
+model_name: "gcn"
 in_channels: 128
 hidden_channels: 128
 out_channels: 40

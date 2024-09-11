@@ -2,6 +2,7 @@
 input_dir: "/home/ra000012/a04083/gnn/gnn/GNN_benchmark/self_benchmark/a64fx/dataset/reddit/balanced_out_degree/"
 graph_name: "reddit"
 model_name: "sage"
+# model_name: "gcn"
 in_channels: 602
 hidden_channels: 256
 out_channels: 41
