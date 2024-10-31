@@ -4,14 +4,17 @@
 * pandas
 ## Installation
 1. Install pytorch-sparse: 
-	1. `git clone [link]`
-	2. `cd pytorch-sparse && python setup.py install`
-2. Install pytorch-geometric:
-	1. `git clone [link]`
-	2. `cd pytorch-geometric && python setup.py install`
-3. Install ParMetis for graph partition
+	1. `git clone [link in my github repo]`
+	3. `cd pytorch-sparse && git checkout a64fx_dev && python setup.py install`
+2. Install pytorch-scatter:
+	1. `git clone [link in my github repo]`
+	2. `cd pytorch-scatter && git checkout a64fx_dev && python setup.py install`
+3. Install pytorch-geometric:
+	1. `git clone [link in my github repo]`
+	2. `cd pytorch-geometric && git checkout zhuang_dev && python setup.py install`
+4. Install ParMetis for graph partition
 	1. please follow the instructions provided by subsection *ParMETIS Installation* in the https://docs.dgl.ai/en/0.9.x/guide/distributed-partition.html# 
-4. Install this framework:
+5. Install this framework:
 	1. `git clone [link]`
 	2. Install kernel
 		1. `cd super_gnn/ops && python setup.py install`
