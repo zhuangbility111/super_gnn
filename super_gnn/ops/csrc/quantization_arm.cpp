@@ -142,10 +142,20 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
                 svfloat32_t v_zero_point_3 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 6]);
                 svfloat32_t v_scale_3 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 7]);
 
-                svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
-                svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
-                svfloat32_t v_quantized_2 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_2, v_zero_point_2), v_scale_2);
-                svfloat32_t v_quantized_3 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_3, v_zero_point_3), v_scale_3);
+                // svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+                // svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
+                // svfloat32_t v_quantized_2 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_2, v_zero_point_2), v_scale_2);
+                // svfloat32_t v_quantized_3 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_3, v_zero_point_3), v_scale_3);
+
+                svfloat32_t v_reciprocal_scale_0 = svrecpe_f32(v_scale_0);
+                svfloat32_t v_reciprocal_scale_1 = svrecpe_f32(v_scale_1);
+                svfloat32_t v_reciprocal_scale_2 = svrecpe_f32(v_scale_2);
+                svfloat32_t v_reciprocal_scale_3 = svrecpe_f32(v_scale_3);
+
+                svfloat32_t v_quantized_0 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_reciprocal_scale_0);
+                svfloat32_t v_quantized_1 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_reciprocal_scale_1);
+                svfloat32_t v_quantized_2 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_2, v_zero_point_2), v_reciprocal_scale_2);
+                svfloat32_t v_quantized_3 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_3, v_zero_point_3), v_reciprocal_scale_3);
 
                 v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
                 v_quantized_1 = svrintn_f32_z(pg_f32, v_quantized_1);
@@ -182,8 +192,14 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
                 svfloat32_t v_zero_point_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 2]);
                 svfloat32_t v_scale_1 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 3]);
 
-                svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
-                svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
+                // svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+                // svfloat32_t v_quantized_1 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_scale_1);
+
+                svfloat32_t v_reciprocal_scale_0 = svrecpe_f32(v_scale_0);
+                svfloat32_t v_reciprocal_scale_1 = svrecpe_f32(v_scale_1);
+
+                svfloat32_t v_quantized_0 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_reciprocal_scale_0);
+                svfloat32_t v_quantized_1 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_1, v_zero_point_1), v_reciprocal_scale_1);
 
                 v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
                 v_quantized_1 = svrintn_f32_z(pg_f32, v_quantized_1);
@@ -210,7 +226,11 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
                 svfloat32_t v_scale_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 1]);
                 
                 // quantize
-                svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+                // svfloat32_t v_quantized_0 = svdiv_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_scale_0);
+
+                svfloat32_t v_reciprocal_scale_0 = svrecpe_f32(v_scale_0);
+
+                svfloat32_t v_quantized_0 = svmul_f32_z(pg_f32, svsub_f32_z(pg_f32, v_input_0, v_zero_point_0), v_reciprocal_scale_0);
 
                 // round to the nearest integer
                 v_quantized_0 = svrintn_f32_z(pg_f32, v_quantized_0);
@@ -728,4 +748,5 @@ void dequantize_tensor_v1(Tensor input, Tensor output,
         //                                     unpacked_feat_len, output_ptr + i * unpacked_feat_len);
     }
 }
+
 

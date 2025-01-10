@@ -35,8 +35,10 @@ def check_cpu_support(extra_compile_args, extra_link_args, source_files):
             )
             source_files.extend(glob.glob("csrc/*_x86.cpp"))
         elif "sve" in result.stdout:
-            extra_compile_args.extend(["-Kopenmp", "-Nlibomp", "-Kfast", "-Kzfill"])
-            extra_link_args.extend(["-Kopenmp", "-Nlibomp", "-Kfast", "-Kzfill"])
+            # extra_compile_args.extend(["-Kopenmp", "-Nlibomp", "-Kfast", "-Kzfill"])
+            # extra_link_args.extend(["-Kopenmp", "-Nlibomp", "-Kfast", "-Kzfill"])
+            extra_compile_args.extend(["-fopenmp", "-Nlibomp", "-Ofast"])
+            extra_link_args.extend(["-fopenmp", "-Nlibomp", "-Ofast"])
             source_files.extend(glob.glob("csrc/*_arm.cpp"))
         else:
             print("Warning: CPU does not support AVX512 or SVE")
