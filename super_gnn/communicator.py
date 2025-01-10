@@ -91,18 +91,11 @@ class Communicator(object):
             recv_splits = comm_splits.send_splits
             send_splits = comm_splits.recv_splits
 
-        barrier_begin = time.perf_counter()
-        dist.barrier()
-        barrier_end = time.perf_counter()
-        comm_begin = time.perf_counter()
-        comm_handle = dist.all_to_all_single(recv_buf, send_buf, recv_splits, send_splits, async_op=self.is_async)
-        comm_end = time.perf_counter()
-        TimeRecorder.ctx.record_barrier_time(barrier_end - barrier_begin)
-        TimeRecorder.ctx.record_communication_time(comm_end - comm_begin)
-        TimeRecorder.print_time(
-            dist.get_rank(), "inner barrier (ms): ", (barrier_end - barrier_begin) * 1000.0
-        )
-        TimeRecorder.print_time(dist.get_rank(), "inner comm (ms): ", (comm_end - comm_begin) * 1000.0)
+        with TimeRecorder.ctx.time_block("barrier(inner)"):
+            dist.barrier()
+        
+        with TimeRecorder.ctx.time_block("alltoallv(inner)"):
+            comm_handle = dist.all_to_all_single(recv_buf, send_buf, recv_splits, send_splits, async_op=self.is_async)
         return comm_handle
 
     def comm_with_fp16(self, comm_splits: CommSplits, comm_buf: CommBuffer, direction: str):
@@ -232,7 +225,6 @@ class Communicator(object):
         comm_buf_for_quantization: CommBufferForQuantization,
         direction: str,
     ):
-        prepare_params_begin = time.perf_counter()
         if direction == "forward":
             recv_splits = comm_splits.recv_splits
             send_splits = comm_splits.send_splits
@@ -272,52 +264,44 @@ class Communicator(object):
 
             quantized_work_range_per_proc = comm_buf_for_quantization.dequantized_work_range_per_proc
 
-        prepare_params_end = time.perf_counter()
         
-        quantize_begin = time.perf_counter()
-        Quantizer_for_all_procs.ctx.quantize_fp32_to_intX(send_buf, 
-                                                          quantized_send_data_buf, 
-                                                          quantized_send_params_buf_fp32, 
-                                                          quantized_work_range_per_proc)
+        with TimeRecorder.ctx.time_block("quantization"):
+            Quantizer_for_all_procs.ctx.quantize_fp32_to_intX(send_buf, 
+                                                            quantized_send_data_buf, 
+                                                            quantized_send_params_buf_fp32, 
+                                                            quantized_work_range_per_proc)
 
         rank = dist.get_rank()
-        quantize_end = time.perf_counter()
         # print_time(rank, "outer quantize data(ms): ", (quantize_end - quantize_begin) * 1000.0)
         # TimeRecorder.print_time(rank, "outer quantize data (ms): ", (quantize_end - quantize_begin) * 1000.0)
 
-        barrier_begin = time.perf_counter()
-        dist.barrier()
-        barrier_end = time.perf_counter()
+        with TimeRecorder.ctx.time_block("barrier(inner)"):
+            dist.barrier()
         # print_time(rank, "barrier (ms): ", (barrier_end - barrier_begin) * 1000.0)
         # comm for quantized params (scale and zero_point)
-        comm_param_begin = time.perf_counter()
-        quantized_send_params_buf_bf16.copy_(quantized_send_params_buf_fp32)
-        dist.all_to_all_single(quantized_recv_params_buf_bf16, 
-                               quantized_send_params_buf_bf16, 
-                               recv_splits, 
-                               send_splits, 
-                               async_op=False)
-        quantized_recv_params_buf_fp32.copy_(quantized_recv_params_buf_bf16)
-        comm_param_end = time.perf_counter()
 
-        comm_data_begin = time.perf_counter()
-        comm_handle = dist.all_to_all_single(quantized_recv_data_buf, 
-                                             quantized_send_data_buf, 
-                                             recv_splits_int2, 
-                                             send_splits_int2, 
-                                             async_op=self.is_async)
-        comm_data_end = time.perf_counter()
+        with TimeRecorder.ctx.time_block("convert_quantized_params_to_bf16"):
+            quantized_send_params_buf_bf16.copy_(quantized_send_params_buf_fp32)
 
-        TimeRecorder.ctx.record_quantization_time(quantize_end - quantize_begin)
-        TimeRecorder.ctx.record_barrier_time(barrier_end - barrier_begin)
-        TimeRecorder.ctx.record_communication_time(comm_data_end - comm_param_begin)
+        with TimeRecorder.ctx.time_block("alltoallv_for_quantized_params"):
+            dist.all_to_all_single(quantized_recv_params_buf_bf16, 
+                                quantized_send_params_buf_bf16, 
+                                recv_splits, 
+                                send_splits, 
+                                async_op=False)
+
+        with TimeRecorder.ctx.time_block("convert_quantized_params_to_fp32"):
+            quantized_recv_params_buf_fp32.copy_(quantized_recv_params_buf_bf16)
+
+        with TimeRecorder.ctx.time_block("alltoallv_for_quantized_data"):
+            comm_handle = dist.all_to_all_single(quantized_recv_data_buf, 
+                                                quantized_send_data_buf, 
+                                                recv_splits_int2, 
+                                                send_splits_int2, 
+                                                async_op=self.is_async)
+
         # print("rank:{}, send_buf shape: {}".format(rank, send_buf.shape), flush=True)
         # print("rank:{}, recv_buf shape (ms): {}".format(rank, recv_buf.shape), flush=True)
-        print("rank:{}, prepare params (ms): {}".format(rank, (prepare_params_end - prepare_params_begin) * 1000.0))
-        print("rank:{}, quantization (ms): {}".format(rank, (quantize_end - quantize_begin) * 1000.0))
-        print("rank:{}, barrier (ms): {}".format(rank, (barrier_end - barrier_begin) * 1000.0), flush=True)
-        print("rank:{}, comm for param (ms): {}".format(rank, (comm_param_end - comm_param_begin) * 1000.0))
-        print("rank:{}, comm for data (ms): {}".format(rank, (comm_data_end - comm_data_begin) * 1000.0), flush=True)
 
         return comm_handle
 
@@ -473,4 +457,3 @@ class Communicator(object):
         # TimeRecorder.print_time(
         #     dist.get_rank(), "inner dequantize data (ms): ", (dequantize_end - dequantize_begin) * 1000.0
         # )
-        TimeRecorder.ctx.record_dequantization_time(dequantize_end - dequantize_begin)

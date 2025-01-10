@@ -10,7 +10,7 @@
 
 source ~/gnn/gnn/pytorch/config_env.sh
 graph_name=ogbn-products
-res_dir=../log/perf
+res_dir=../log/perf_check_breakdown
 mkdir -p ${res_dir}
 dir_stdout=${res_dir}/${PJM_MPI_PROC}proc/
 

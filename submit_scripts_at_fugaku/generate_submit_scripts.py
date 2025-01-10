@@ -43,7 +43,7 @@ def generate_job_submission_script(num_mpi_processes, node_hours, graph_name, is
     script += "source ~/gnn/gnn/pytorch/config_env.sh\n"
     script += "graph_name={}\n".format(graph_name)
     # script += "dir_stdout=../log/barrier_with_no_asnyc_v1/${PJM_MPI_PROC}proc/\n"
-    script += "res_dir=../log/perf\n"
+    script += "res_dir=../log/perf_check_breakdown\n"
     script += "mkdir -p ${res_dir}\n"
     script += "dir_stdout=${res_dir}/${PJM_MPI_PROC}proc/\n"
 

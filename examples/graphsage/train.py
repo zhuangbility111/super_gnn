@@ -27,27 +27,29 @@ def train_step(model, data, optimizer, epoch, num_train_nodes, label_rate):
     else:
         propagation_mask = None
         supervision_mask = data["nodes_train_masks"]
+    
+    # prepare time recorder
+    TimeRecorder.ctx.set_mode("training")
+    TimeRecorder.ctx.set_epoch(epoch)
 
-    forward_start = time.perf_counter()
-    Assigner.ctx.reassign_node_dataformat(epoch)
-    optimizer.zero_grad()
-    out = model(data["graph"], data["nodes_features"], data["nodes_labels"], propagation_mask)
-    # backward_start = time.perf_counter()
-    # loss = F.nll_loss(out[data["nodes_train_masks"]], data["nodes_labels"][data["nodes_train_masks"]], reduction="sum")
-    loss = F.nll_loss(out[supervision_mask], data["nodes_labels"][supervision_mask], reduction="sum")
-    loss = loss / num_train_nodes
-    loss.backward()
+    with TimeRecorder.ctx.time_block("total_training_time", is_record=False):
+        Assigner.ctx.reassign_node_dataformat(epoch)
+        optimizer.zero_grad()
+        out = model(data["graph"], data["nodes_features"], data["nodes_labels"], propagation_mask)
+        # backward_start = time.perf_counter()
+        # loss = F.nll_loss(out[data["nodes_train_masks"]], data["nodes_labels"][data["nodes_train_masks"]], reduction="sum")
+        loss = F.nll_loss(out[supervision_mask], data["nodes_labels"][supervision_mask], reduction="sum")
+        loss = loss / num_train_nodes
+        loss.backward()
 
-    # update_weight_start = time.perf_counter()
-    optimizer.step()
-    update_weight_end = time.perf_counter()
+        # update_weight_start = time.perf_counter()
+        optimizer.step()
     # total_forward_dur += backward_start - forward_start
     # total_backward_dur += update_weight_start - backward_start
     # total_update_weight_dur += update_weight_end - update_weight_start
     # total_training_dur += update_weight_end - forward_start
 
-    TimeRecorder.ctx.record_total_training_time(update_weight_end - forward_start)
-    TimeRecorder.ctx.next_epoch()
+    TimeRecorder.ctx.set_mode("inference")
 
     return loss
 
@@ -55,7 +57,6 @@ def train_step(model, data, optimizer, epoch, num_train_nodes, label_rate):
 def test_step(model, data, is_label_augment):
     model.eval()
 
-    TimeRecorder.ctx.set_is_training(False)
 
     predict_result = []
     loss_result = []
@@ -94,7 +95,6 @@ def test_step(model, data, is_label_augment):
 
     val_loss = float(loss_result[1])
 
-    TimeRecorder.ctx.set_is_training(True)
 
     return train_acc, val_acc, test_acc, val_loss
 
@@ -276,5 +276,7 @@ if __name__ == "__main__":
 
     test(model, data, config["is_label_augment"], checkpt_file)
 
-    TimeRecorder.ctx.print_total_time()
+    # TimeRecorder.ctx.print_total_time()
     # TimeRecorder.ctx.save_time_to_file(config["graph_name"], world_size)
+    # TimeRecorder.ctx.report()
+    TimeRecorder.ctx.save_to_excel(config["graph_name"] + "_" + str(world_size) + "_" + str(config["num_bits"]) + "_" + pre_post_text + "_" + str(config["is_label_augment"]))

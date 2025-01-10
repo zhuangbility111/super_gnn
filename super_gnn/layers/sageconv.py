@@ -66,25 +66,24 @@ class DistSAGEConvGrad(MessagePassing):
         # if linear_first:
         # local_nodes_feat = self.lin(local_nodes_feat)
 
-        propagate_begin = time.perf_counter()
-        out = self.propagate(graph, local_nodes_feat, layer)
+        with TimeRecorder.ctx.time_block("total_aggregator(outer)", is_record=False):
+            out = self.propagate(graph, local_nodes_feat, layer)
 
-        add_bias_begin = time.perf_counter()
-        TimeRecorder.print_time(
-            dist.get_rank(), "outer propagate forward (ms): ", (add_bias_begin - propagate_begin) * 1000.0
-        )
         # print("outer propagate forward (ms): {}".format((add_bias_begin - propagate_begin) * 1000.0))
         # out += local_nodes_feat
 
-        if self.normalize:
-            # out /= graph.in_degrees + 1
-            out /= graph.in_degrees
+        with TimeRecorder.ctx.time_block("Normalization", is_record=False):
+            if self.normalize:
+                # out /= graph.in_degrees + 1
+                out /= graph.in_degrees
 
-        # if not linear_first:
-        out = self.lin_neigh(out)
-        out += self.lin_self(local_nodes_feat)
+        with TimeRecorder.ctx.time_block("nn_operation", is_record=False):
+            # if not linear_first:
+            out = self.lin_neigh(out)
+            out += self.lin_self(local_nodes_feat)
 
-        if self.bias is not None:
-            out += self.bias
+        with TimeRecorder.ctx.time_block("add_bias", is_record=False):
+            if self.bias is not None:
+                out += self.bias
 
         return out
