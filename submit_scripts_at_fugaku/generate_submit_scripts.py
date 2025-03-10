@@ -36,6 +36,7 @@ def generate_job_submission_script(num_mpi_processes, node_hours, graph_name, is
 
     script += "#PJM -L \"node={}:torus:strict-io,freq=2000\"\n".format(node_configures[num_mpi_processes])
     script += "#PJM --mpi \"proc={}\"\n".format(num_mpi_processes)
+    script += "#PJM --mpi \"max-proc-per-node=4\"\n"
     script += "#PJM -j\n"
     script += "#PJM -S\n"
 
@@ -43,7 +44,9 @@ def generate_job_submission_script(num_mpi_processes, node_hours, graph_name, is
     script += "source ~/gnn/gnn/pytorch/config_env.sh\n"
     script += "graph_name={}\n".format(graph_name)
     # script += "dir_stdout=../log/barrier_with_no_asnyc_v1/${PJM_MPI_PROC}proc/\n"
-    script += "res_dir=../log/perf_check_breakdown\n"
+    # script += "res_dir=../log/perf_check_breakdown_reciprocal_estimate\n"
+    # script += "res_dir=../log/absolute_perf_without_print_breakdown\n"
+    script += "res_dir=../log/perf_compare_with_sylvie\n"
     script += "mkdir -p ${res_dir}\n"
     script += "dir_stdout=${res_dir}/${PJM_MPI_PROC}proc/\n"
 
@@ -52,13 +55,13 @@ def generate_job_submission_script(num_mpi_processes, node_hours, graph_name, is
     script += "date\n"
     if is_label_augment:
         script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori/stdout -stderr-proc ${dir_stdout}/ori/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=32 --is_label_augment=true\n"
-        script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+pre/stdout -stderr-proc ${dir_stdout}/ori+pre/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=32 --is_pre_delay=true --is_label_augment=true\n"
-        script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+int2/stdout -stderr-proc ${dir_stdout}/ori+int2/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=2 --is_label_augment=true\n"
+        # script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+pre/stdout -stderr-proc ${dir_stdout}/ori+pre/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=32 --is_pre_delay=true --is_label_augment=true\n"
+        # script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+int2/stdout -stderr-proc ${dir_stdout}/ori+int2/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=2 --is_label_augment=true\n"
         script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+pre+int2/stdout -stderr-proc ${dir_stdout}/ori+pre+int2/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=2 --is_pre_delay=true --is_label_augment=true\n"
     else:
         script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori/stdout -stderr-proc ${dir_stdout}/ori/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=32\n"
-        script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+pre/stdout -stderr-proc ${dir_stdout}/ori+pre/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=32 --is_pre_delay=true\n"
-        script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+int2/stdout -stderr-proc ${dir_stdout}/ori+int2/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=2\n"
+        # script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+pre/stdout -stderr-proc ${dir_stdout}/ori+pre/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=32 --is_pre_delay=true\n"
+        # script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+int2/stdout -stderr-proc ${dir_stdout}/ori+int2/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=2\n"
         script += "LD_PRELOAD=$tcmalloc_path:$LD_PRELOAD mpirun -np ${PJM_MPI_PROC} -stdout-proc ${dir_stdout}/ori+pre+int2/stdout -stderr-proc ${dir_stdout}/ori+pre+int2/stderr python ../../../examples/graphsage/train.py --config=../../../examples/graphsage/config/fugaku/${graph_name}.yaml --num_bits=2 --is_pre_delay=true\n"
     script += "date\n"
 
@@ -82,11 +85,11 @@ if graph_name == "ogbn-products":
     num_mpi_processes_list = [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
     node_hours_list = ["8", "6", "4", "2", "1", "1", "1", "1", "1", "1", "1"]
 elif graph_name == "ogbn-papers100M":
-    num_mpi_processes_list = [512, 1024, 2048, 4096, 8192, 16384]
-    node_hours_list = ["4", "3", "2", "2", "1", "1"]
+    num_mpi_processes_list = [512, 1024, 2048, 4096, 8192]
+    node_hours_list = ["4", "3", "2", "2", "2"]
 elif graph_name == "proteins":
-    num_mpi_processes_list = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-    node_hours_list = ["8", "6", "4", "2", "1", "1", "1", "1", "1", "1", "1"]
+    num_mpi_processes_list = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
+    node_hours_list = ["8", "6", "4", "3", "2", "2", "2", "2", "1", "1"]
 elif graph_name == "reddit":
     num_mpi_processes_list = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
     node_hours_list = ["8", "6", "4", "4", "2", "1", "1", "1", "1", "1", "1", "1"]
@@ -94,14 +97,18 @@ elif graph_name == "uk-2007-02":
     num_mpi_processes_list = [512, 1024, 2048, 4096, 8192, 16384]
     node_hours_list = ["3", "2", "1", "1", "1", "1"]
 elif graph_name == "ogbn-mag240M_paper_cites_paper":
-    num_mpi_processes_list = [1024, 2048, 4096, 8192, 16384]
-    node_hours_list = ["3", "2", "2", "1", "1"]
+    num_mpi_processes_list = [1024, 2048, 4096, 8192]
+    node_hours_list = ["3", "2", "2", "2"]
+elif graph_name == "IGB260M":
+    num_mpi_processes_list = [2048, 4096, 8192]
+    node_hours_list = ["3", "3", "2"]
 
 
 for i in range(len(num_mpi_processes_list)):
-    is_label_augment = False
-    if graph_name == "ogbn-papers100M" or graph_name == "ogbn-mag240M_paper_cites_paper":
-        is_label_augment = True
+    # is_label_augment = False
+    # if graph_name == "ogbn-papers100M" or graph_name == "ogbn-mag240M_paper_cites_paper":
+    #     is_label_augment = True
+    is_label_augment = True
     script = generate_job_submission_script(num_mpi_processes_list[i], node_hours_list[i], graph_name, is_label_augment)
     filename = os.path.join(output_dir, "run_{}_{}.sh".format(graph_name, num_mpi_processes_list[i]))
 
