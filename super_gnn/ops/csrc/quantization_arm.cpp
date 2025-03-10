@@ -113,7 +113,12 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
             quantized_params_ptr[row_idx * QUANTIZED_PARAMS_SIZE + 1] = scale;
         }
 
+
         int row_idx = row_begin_fp32 + i;
+        __builtin_prefetch(&(input_ptr[(row_idx + 4) * feat_len]), 0, 3);
+        __builtin_prefetch(&(input_ptr[(row_idx + 5) * feat_len]), 0, 3);
+        __builtin_prefetch(&(input_ptr[(row_idx + 6) * feat_len]), 0, 3);
+        __builtin_prefetch(&(input_ptr[(row_idx + 7) * feat_len]), 0, 3);
         for (int j = 0; j < feat_len; j += VEC_LEN)
         {
             svbool_t pg_f32 = svwhilelt_b32(j, feat_len);
@@ -128,10 +133,12 @@ void quantize_tensor_kernel(float *input_ptr, float *quantized_params_ptr, uint8
 
                 int quantized_params_idx = row_idx * QUANTIZED_PARAMS_SIZE;
 
-                __builtin_prefetch(&(input_ptr[(row_idx + 8) * feat_len]), 0, 3);
-                __builtin_prefetch(&(input_ptr[(row_idx + 9) * feat_len]), 0, 3);
-                __builtin_prefetch(&(input_ptr[(row_idx + 10) * feat_len]), 0, 3);
-                __builtin_prefetch(&(input_ptr[(row_idx + 11) * feat_len]), 0, 3);
+				/*
+                __builtin_prefetch(&(input_ptr[(row_idx + 4) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 5) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 6) * feat_len]), 0, 3);
+                __builtin_prefetch(&(input_ptr[(row_idx + 7) * feat_len]), 0, 3);
+				*/
 
                 svfloat32_t v_zero_point_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx]);
                 svfloat32_t v_scale_0 = svdup_n_f32(quantized_params_ptr[quantized_params_idx + 1]);
