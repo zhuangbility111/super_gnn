@@ -199,12 +199,12 @@ class DistSAGE(torch.nn.Module):
             total_relu_time = relu_end - relu_begin
             total_dropout_time = relu_begin - dropout_begin
             rank = dist.get_rank()
-            if rank == 0:
-                print("----------------------------------------")
-                print("Time of conv(ms): {:.4f}".format(total_conv_time * 1000.0))
-                print("Time of relu(ms): {:.4f}".format(total_relu_time * 1000.0))
-                print("Time of dropout(ms): {:.4f}".format(total_dropout_time * 1000.0))
-                print("----------------------------------------")
+            # if rank == 0:
+            #     print("----------------------------------------")
+            #     print("Time of conv(ms): {:.4f}".format(total_conv_time * 1000.0))
+            #     print("Time of relu(ms): {:.4f}".format(total_relu_time * 1000.0))
+            #     print("Time of dropout(ms): {:.4f}".format(total_dropout_time * 1000.0))
+            #     print("----------------------------------------")
 
         conv_begin = time.perf_counter()
         nodes_feats = self.convs[-1](graph, nodes_feats, len(self.convs) - 1)
