@@ -1,4 +1,7 @@
+import os
 from setuptools import setup, find_packages
+
+ops_setup_path = os.path.join(os.path.dirname(__file__), 'supergnn', 'ops', 'setup.py')
 
 setup(
     name='super_gnn',
@@ -8,6 +11,9 @@ setup(
         # 列出项目的依赖项
         'requests',
         'numpy',
+    ],
+    setup_requires=[
+        f'file://{ops_setup_path}',
     ],
     description='a distributed gnns training system for cpu supercomputers',
 )

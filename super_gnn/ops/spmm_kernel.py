@@ -43,59 +43,58 @@ def disribute_work_for_col(other: torch.Tensor,  num_threads_on_col: int):
     # print(col_splits)
     return col_splits
     
-def SPMM_forward(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+def SPMM_forward_cpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
     rowptr, col, value = src.csr()
-
     row_splits, col_splits = src.get_work_range()
-    # if row_splits is None
     if row_splits.size(0) == 0:
         num_threads = torch.get_num_threads()
         row_splits = distribute_work_for_row(rowptr, value, num_threads)
-
-    # the other matrix might change, so we need to re-distribute work for col_splits every time
     col_splits = disribute_work_for_col(other, 1)
-
     src.set_work_range(row_splits, col_splits)
-    
     if value is not None:
         value = value.to(other.dtype)
-    
     sparse_row = rowptr.shape[0] - 1
-    # begin = time.perf_counter()
     spmm(rowptr, col, value, other, out, sparse_row, row_splits, col_splits)
-    # end = time.perf_counter()
-    # print("time = {} ms".format((end - begin) * 1000.0))
     return None
-    # return spmm_sum_without_backward(rowptr, col, value, other, out, row_splits, col_splits)
-    # return matmul(src, other)
 
-def SPMM_backward(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-    # rowptr, col, value = src.csr()
-    # row = src.storage.row()
-    # csr2csc = src.storage.csr2csc()
-    # opt_value = value.view(-1, 1).index_select(0, csr2csc).view(-1)
+def SPMM_forward_gpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+    sparse_matrix = src.to_torch_sparse_coo_tensor()
+    result = torch.sparse.mm(sparse_matrix, other)
+    out.copy_(result)
+    return None
+
+def SPMM_forward(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+    if src.device.type == 'cuda' and other.device.type == 'cuda':
+        return SPMM_forward_gpu(src, other, out)
+    return SPMM_forward_cpu(src, other, out)
+
+def SPMM_backward_cpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
     colptr = src.storage.colptr()
     row_T = src.storage.row_T()
     value_T = src.storage.value_T()
-
     row_splits, col_splits = src.get_work_range_for_transpose()
     if row_splits.size(0) == 0:
         num_threads = torch.get_num_threads()
         row_splits = distribute_work_for_row(colptr, value_T, num_threads)
-
     col_splits = disribute_work_for_col(other, 1)
-    
     src.set_work_range_for_transpose(row_splits, col_splits)
-
     sparse_row = colptr.shape[0] - 1
     return spmm(colptr, row_T, value_T, other, out, sparse_row, row_splits, col_splits)
 
-    # return spmm_sum_without_backward(colptr, row.index_select(0, csr2csc), opt_value, other)
-    # return spmm_sum_without_backward(colptr, row_T, value_T, other, out, row_splits, col_splits)
+def SPMM_backward_gpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+    colptr = src.storage.colptr()
+    row_T = src.storage.row_T()
+    value_T = src.storage.value_T()
+    sparse_matrix = torch.sparse_csr_tensor(
+        colptr, row_T, value_T, device=src.device, dtype=other.dtype
+    )
+    result = torch.sparse.mm(sparse_matrix, other)
+    out.copy_(result)
+    return None
 
-    # sparse_sizes = (src.sparse_sizes()[1], src.sparse_sizes()[0])
-    # src = SparseTensor(rowptr=colptr, col=row_T, value=value_T, sparse_sizes=sparse_sizes, is_sorted=True)
+def SPMM_backward(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+    if src.device.type == 'cuda' and other.device.type == 'cuda':
+        return SPMM_backward_gpu(src, other, out)
+    return SPMM_backward_cpu(src, other, out)
 
-    # return matmul(src, other)
 
-    

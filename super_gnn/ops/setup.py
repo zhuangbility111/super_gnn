@@ -4,6 +4,20 @@ import subprocess
 import glob
 
 
+def check_cuda_support():
+    try:
+        result = subprocess.run(["nvcc", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            print("CUDA is supported.")
+            return True
+        else:
+            print("CUDA is not supported.")
+            return False
+    except FileNotFoundError:
+        print("CUDA is not installed.")
+        return False
+
+
 def check_cpu_support(extra_compile_args, extra_link_args, source_files):
     try:
         result = subprocess.run(["lscpu"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -35,8 +49,6 @@ def check_cpu_support(extra_compile_args, extra_link_args, source_files):
             )
             source_files.extend(glob.glob("csrc/*_x86.cpp"))
         elif "sve" in result.stdout:
-            # extra_compile_args.extend(["-Kopenmp", "-Nlibomp", "-Kfast", "-Kzfill"])
-            # extra_link_args.extend(["-Kopenmp", "-Nlibomp", "-Kfast", "-Kzfill"])
             extra_compile_args.extend(["-fopenmp", "-Nlibomp", "-Ofast"])
             extra_link_args.extend(["-fopenmp", "-Nlibomp", "-Ofast"])
             source_files.extend(glob.glob("csrc/*_arm.cpp"))
@@ -50,12 +62,21 @@ def check_cpu_support(extra_compile_args, extra_link_args, source_files):
 def get_extensions():
     extra_compile_args = ["-O3"]
     extra_link_args = []
-    source_files = ["csrc/utils.cpp", "csrc/spmm.cpp", "csrc/ops.cpp", "csrc/vertex_cover.cpp"]
-    check_cpu_support(extra_compile_args, extra_link_args, source_files)
+    source_files = []
+
+    if check_cuda_support():
+        extra_compile_args += ["-DUSE_CUDA", "-x", "cu", "--expt-extended-lambda", "-std=c++14"]
+        extra_link_args += ["-lcudart", "-lcuda"]
+        source_files += glob.glob("csrc/*.cu")
+        extension_type = cpp_extension.CUDAExtension
+    else:
+        source_files += ["csrc/utils.cpp", "csrc/spmm.cpp", "csrc/ops.cpp", "csrc/vertex_cover.cpp"]
+        check_cpu_support(extra_compile_args, extra_link_args, source_files)
+        extension_type = cpp_extension.CppExtension
 
     extensions = []
     extensions.append(
-        cpp_extension.CppExtension(
+        extension_type(
             "supergnn_ops",
             source_files,
             include_dirs=["csrc/"],
