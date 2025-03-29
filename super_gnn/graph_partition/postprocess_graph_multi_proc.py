@@ -214,6 +214,7 @@ def split_node_datamask(
             node_idx_begin,
             os.path.join(out_dir, "p{:0>3d}-{}_nodes_test_idx.npy".format(i, graph_name)),
         )
+        print("remapping data mask for partition {} is over.".format(i))
 
     remap_end = time.perf_counter()
     print("elapsed time of ramapping dataset mask(ms) = {}".format((remap_end - remap_start) * 1000))
@@ -227,7 +228,8 @@ def combined_func(
     os.sched_setaffinity(pid, [core_id])
     # get the current process id and the core id
     print("The process id is: ", pid, " and the core id is: ", os.sched_getaffinity(pid), flush=True)
-    split_nodes_feats(in_raw_dir, in_partition_dir, out_dir, graph_name, begin_part, end_part, node_feats)
+    # remove first step
+    # split_nodes_feats(in_raw_dir, in_partition_dir, out_dir, graph_name, begin_part, end_part, node_feats)
     split_node_datamask(in_raw_dir, in_partition_dir, out_dir, graph_name, begin_part, end_part)
 
 
@@ -256,7 +258,10 @@ if __name__ == "__main__":
     process_list = []
 
     # load the node_feats first, so that all process can share the same node_feats
-    node_feats = np.load(os.path.join(in_raw_dir, "{}_nodes_feat.npy".format(graph_name)))
+    # remove first step
+    # node_feats = np.load(os.path.join(in_raw_dir, "{}_nodes_feat.npy".format(graph_name)))
+    node_feats = None
+    #########
     print("load node_feats over!!!")
 
     for pid in range(num_process):
