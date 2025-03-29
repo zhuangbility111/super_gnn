@@ -279,4 +279,4 @@ if __name__ == "__main__":
     # TimeRecorder.ctx.print_total_time()
     # TimeRecorder.ctx.save_time_to_file(config["graph_name"], world_size)
     # TimeRecorder.ctx.report()
-    TimeRecorder.ctx.save_to_excel(config["graph_name"] + "_" + str(world_size) + "_" + str(config["num_bits"]) + "_" + pre_post_text + "_" + str(config["is_label_augment"]))
+    # TimeRecorder.ctx.save_to_excel(config["graph_name"] + "_" + str(world_size) + "_" + str(config["num_bits"]) + "_" + pre_post_text + "_" + str(config["is_label_augment"]))
