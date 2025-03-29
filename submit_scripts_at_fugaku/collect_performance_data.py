@@ -63,17 +63,19 @@ def collect_test_acc(sorted_statistic_dict, output_file):
         test_acc_dict["epoch"] = list()
         num_epochs = 0
         for optimization_type, data in value.items():
-            # test_acc_dict[label_list[optimization_type]] = data["test_acc"]
-            # num_epochs = len(data["test_acc"])
-            test_acc_dict[label_list[optimization_type]] = data["val_acc"]
-            num_epochs = len(data["val_acc"])
+            if optimization_type not in label_list:
+                continue
+            test_acc_dict[label_list[optimization_type]] = data["test_acc"]
+            num_epochs = len(data["test_acc"])
+            # test_acc_dict[label_list[optimization_type]] = data["val_acc"]
+            # num_epochs = len(data["val_acc"])
         test_acc_dict["epoch"] = [i for i in range(num_epochs)]
         print("world_size: {}, num_epochs; {}".format(world_size, num_epochs))
 
         df = pd.DataFrame(test_acc_dict)
         with pd.ExcelWriter(output_file, engine="openpyxl", mode="a") as writer:
-            # df.to_excel(writer, sheet_name="test_acc_on_{}".format(world_size), index=False)
-            df.to_excel(writer, sheet_name="val_acc_on_{}".format(world_size), index=False)
+            df.to_excel(writer, sheet_name="test_acc_on_{}".format(world_size), index=False)
+            # df.to_excel(writer, sheet_name="val_acc_on_{}".format(world_size), index=False)
 
 
 def collect_statistic_data(input_dir):

@@ -43,7 +43,26 @@ void kernel_1xN(int64_t* col, float* value, float* mat, float* out, int m, int n
         if (N > 0) vb0 = svld1(pg0, &(mat[b_idx]));
         if (N > 1) vb1 = svld1(pg1, &(mat[b_idx + VEC_LEN]));
         if (N > 2) vb2 = svld1(pg2, &(mat[b_idx + 2 * VEC_LEN]));
-        if (N > 3) vb3 = svld1(pg3, &(mat[b_idx + 3 * VEC_LEN]));
+        if (N > 3) {
+            vb3 = svld1(pg3, &(mat[b_idx + 3 * VEC_LEN]));
+            int prefetch_idx = b_idx + 4 * VEC_LEN;
+            __builtin_prefetch(&(mat[prefetch_idx]), 0, 3);
+            __builtin_prefetch(&(mat[prefetch_idx + 64]), 0, 3);
+            // __builtin_prefetch(&(mat[prefetch_idx + 128]), 0, 3);
+
+             // int next_k = col[id_on_cols + 1];
+             // int next_b_idx = next_k * ldb + n;
+            // __builtin_prefetch(&(mat[next_b_idx]), 0, 3);
+            // __builtin_prefetch(&(mat[next_b_idx + 64]), 0, 3);
+            // __builtin_prefetch(&(mat[next_b_idx + 2 * 64]), 0, 3);
+            // __builtin_prefetch(&(mat[next_b_idx + 3 * 64]), 0, 3);
+            // int next_next_k = col[id_on_cols + 2];
+            // int next_next_b_idx = next_next_k * ldb + n;
+            // __builtin_prefetch(&(mat[next_next_b_idx]), 0, 3);
+            // __builtin_prefetch(&(mat[next_next_b_idx + 64]), 0, 3);
+            // __builtin_prefetch(&(mat[next_next_b_idx + 2 * 64]), 0, 3);
+            // __builtin_prefetch(&(mat[next_next_b_idx + 3 * 64]), 0, 3);
+        }
 
         // fma based on the value of N
         if (N > 0) vout0 = svmla_f32_x(pg0, vout0, va, vb0);
@@ -455,21 +474,31 @@ void spmm_cpu_optimized_no_tile_v1(
             Inner_kernel main_kernel =
                 select_kernel(step_on_N, step_main_kernel, pg0_main, pg1_main, pg2_main, pg3_main);
             Inner_kernel corner_kernel = select_kernel(step_on_N % step_main_kernel, step_corner_kernel, pg0_corner,
-                                                       pg1_corner, pg2_corner, pg3_corner);
+                                                        pg1_corner, pg2_corner, pg3_corner);
             int start_on_N_main = start_on_N;
             int end_on_N_main = end_on_N - step_corner_kernel;
             int start_on_N_corner = end_on_N_main;
             int end_on_N_corner = end_on_N;
 
-            /*
-            printf("step_main_kernel = %d, step_corner_kernel = %d\n", step_main_kernel, step_corner_kernel);
-            printf("start_on_N_main = %d, end_on_N_main = %d\n", start_on_N_main, end_on_N_main);
-            printf("start_on_N_corner = %d, end_on_N_corner = %d\n", start_on_N_corner, end_on_N_corner);
-            */
-
             for (int m = start_on_M; m < end_on_M; m++) {
                 int start_on_cols = rowptr_data[m];
                 int end_on_cols = rowptr_data[m + 1];
+            if (end_on_cols > start_on_cols) {
+                int out_idx = m * N;
+                __builtin_prefetch(&out_data[out_idx], 0, 0);
+                __builtin_prefetch(&out_data[out_idx + 64], 0, 0);
+                __builtin_prefetch(&out_data[out_idx + 128], 0, 0);
+                __builtin_prefetch(&out_data[out_idx + 192], 0, 0);
+                int next_out_idx = (m + 1) * N;
+                __builtin_prefetch(&out_data[next_out_idx], 0, 0);
+                __builtin_prefetch(&out_data[next_out_idx + 64], 0, 0);
+                __builtin_prefetch(&out_data[next_out_idx + 128], 0, 0);
+                __builtin_prefetch(&out_data[next_out_idx + 192], 0, 0);
+                int next_next_out_idx = (m + 2) * N;
+                __builtin_prefetch(&out_data[next_next_out_idx], 0, 0);
+                __builtin_prefetch(&out_data[next_next_out_idx + 64], 0, 0);
+                __builtin_prefetch(&out_data[next_next_out_idx + 128], 0, 0);
+                __builtin_prefetch(&out_data[next_next_out_idx + 192], 0, 0);
                 for (int n = start_on_N_main; n < end_on_N_main; n += step_main_kernel) {
                     main_kernel(col_data, value_data, mat_data, out_data, m, n, N, start_on_cols, end_on_cols, pg0_main,
                                 pg1_main, pg2_main, pg3_main);
@@ -477,9 +506,10 @@ void spmm_cpu_optimized_no_tile_v1(
 
                 if (start_on_N_corner < end_on_N_corner) {
                     corner_kernel(col_data, value_data, mat_data, out_data, m, start_on_N_corner, N, start_on_cols,
-                                  end_on_cols, pg0_corner, pg1_corner, pg2_corner, pg3_corner);
+                                    end_on_cols, pg0_corner, pg1_corner, pg2_corner, pg3_corner);
                 }
             }
+        }
             /*
             duration<double, std::milli> diff1 = (system_clock::now() - start_time);
             elapsed_time_array[tid] = diff1.count();

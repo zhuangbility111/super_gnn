@@ -10,7 +10,7 @@
 
 source ~/gnn/gnn/pytorch/config_env.sh
 graph_name=ogbn-mag240M_paper_cites_paper
-res_dir=../log/perf
+res_dir=../log/perf_check_breakdown
 mkdir -p ${res_dir}
 dir_stdout=${res_dir}/${PJM_MPI_PROC}proc/
 

@@ -2,6 +2,7 @@ import torch
 from torch_scatter import segment_csr
 from torch_sparse import SparseTensor
 from supergnn_ops import spmm
+import time
 
 
 def distribute_work_for_row(rowptr: torch.Tensor, value: torch.Tensor, num_threads_on_row: int) -> torch.Tensor:

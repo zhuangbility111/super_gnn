@@ -58,12 +58,9 @@ class QuantizerForMixedBits(object):
 
     @staticmethod
     def dequantize_intX_to_fp32(data_int8, data_fp32, quantized_nodes_feat_range, dequantized_params):
-        dequantization_begin = time.perf_counter()
         supergnn_ops.dequantize_tensor_v1(
             data_int8, data_fp32, quantized_nodes_feat_range, dequantized_params
         )
-        dequantization_end = time.perf_counter()
-        TimeRecorder.ctx.record_dequantization_time(dequantization_end - dequantization_begin)
 
     @staticmethod
     def get_quantized_nodes_feat_range(num_nodes: int, feat_len: int, nodes_num_bits_tensor: Tensor):

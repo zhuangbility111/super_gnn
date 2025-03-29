@@ -1,211 +1,140 @@
 import torch
 import numpy as np
 import torch.distributed as dist
+import time
+import pandas as pd
+from collections import defaultdict
 
 class TimeRecorder(object):
     def __init__(self, num_layer, num_epoch) -> None:
-        self.barrier_time = torch.zeros((num_layer * 2, num_epoch))
-        self.quantization_time = torch.zeros((num_layer * 2, num_epoch))
-        self.communication_time = torch.zeros((num_layer * 2, num_epoch))
-        self.dequantization_time = torch.zeros((num_layer * 2, num_epoch))
-        self.prepare_comm_time = torch.zeros((num_layer * 2, num_epoch))
-        self.pre_aggregate_time = torch.zeros((num_layer * 2, num_epoch))
-        self.local_aggregate_time = torch.zeros((num_layer * 2, num_epoch))
-        self.remote_aggregate_time = torch.zeros((num_layer * 2, num_epoch))
-        self.total_covolution_time = torch.zeros((num_layer * 2, num_epoch))
-        self.total_training_time = torch.zeros(num_epoch)
-        self.cur_epoch = 0
-        self.cur_layer = 0
-        self._is_training = True
+        self.mode = None  # 当前模式，例如 'training' 或 'validation'
+        self.current_epoch = None  # 当前迭代号
+        self.records = defaultdict(lambda: defaultdict(list))
         TimeRecorder.ctx = self
 
-    def record_barrier_time(self, time: float) -> None:
-        if self._is_training:
-            self.barrier_time[self.cur_layer, self.cur_epoch] += time
-
-    def record_quantization_time(self, time: float) -> None:
-        if self._is_training:
-            self.quantization_time[self.cur_layer, self.cur_epoch] += time
-
-    def record_communication_time(self, time: float) -> None:
-        if self._is_training:
-            self.communication_time[self.cur_layer, self.cur_epoch] += time
-
-    def record_dequantization_time(self, time: float) -> None:
-        if self._is_training:
-            self.dequantization_time[self.cur_layer, self.cur_epoch] += time
-
-    def record_total_convolution_time(self, time: float) -> None:
-        if self._is_training:
-            self.total_covolution_time[self.cur_layer, self.cur_epoch] += time
-
-    def record_prepare_comm_time(self, time: float) -> None:
-        if self._is_training:
-            self.prepare_comm_time[self.cur_layer, self.cur_epoch] += time
-
-    def record_pre_aggregate_time(self, time: float) -> None:
-        if self._is_training:
-            self.pre_aggregate_time[self.cur_layer, self.cur_epoch] += time
+    def set_mode(self, mode):
+        """设置当前模式"""
+        self.mode = mode
     
-    def record_local_aggregate_time(self, time: float) -> None:
-        if self._is_training:
-            self.local_aggregate_time[self.cur_layer, self.cur_epoch] += time
+    def set_epoch(self, epoch):
+        """设置当前迭代号"""
+        self.current_epoch = epoch
+
+    def time_block(self, module_name, is_record=True):
+        """上下文管理器，用于测量代码段耗时"""
+        class TimerContext:
+            def __init__(self, outer):
+                self.outer = outer
+                self.module_name = module_name
+                self.start_time = None
+                self.is_record = is_record
+
+            def __enter__(self):
+                if self.outer.mode == "training":  # 仅在模式为 'training' 时记录
+                    self.start_time = time.perf_counter()
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                if self.outer.mode == "training" and self.start_time is not None:
+                    elapsed_time = (time.perf_counter() - self.start_time) * 1000.0  # 转换为毫秒
+                    current_epoch = self.outer.current_epoch
+                    if self.is_record:
+                        self.outer.records[self.module_name][current_epoch].append(elapsed_time)
+                    print(f"Module: {self.module_name}, Time: {elapsed_time:.6f} ms")
+
+        return TimerContext(self)
+
+    def report(self):
+        """打印耗时统计结果"""
+        for module_name, epochs in self.records.items():
+            print(f"Module: {module_name}")
+            for epoch, times in epochs.items():
+                print(f"  epoch: {epoch}")
+                print(f"    Count: {len(times)}")
+                print(f"    Avg Time: {sum(times) / len(times):.6f} s")
+                print(f"    Max Time: {max(times):.6f} s")
+                print(f"    Min Time: {min(times):.6f} s")
+            print()
     
-    def record_remote_aggregate_time(self, time: float) -> None:
-        if self._is_training:
-            self.remote_aggregate_time[self.cur_layer, self.cur_epoch] += time
-    
-    def record_total_training_time(self, time: float) -> None:
-        if self._is_training:
-            self.total_training_time[self.cur_epoch] += time
+    def get_stats(self):
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        # convert the list of times to a tensor according to the predefined order of module_name and epoch
+        times = []
+        for module_name, epochs in self.records.items():
+            for epoch, epoch_times in epochs.items():
+                times.extend(epoch_times)
+        # 2d tensor with shape (num_module * num_epoch, num_times)
+        num_module = len(self.records)
+        num_epoch = len(self.records[list(self.records.keys())[0]])
+        times = torch.tensor(times, dtype=torch.float32).reshape(num_module * num_epoch, -1)
 
-    def next_layer(self) -> None:
-        if self._is_training:
-            self.cur_layer += 1
+        """获取最小、最大、平均和标准差值"""
+        # for module_name, epochs in self.records.items():
+        #     for epoch, times in epochs.items():
+        #         if len(times) == 0:
+        #             continue
+        min_time = torch.clone(times)
+        max_time = torch.clone(times)
+        avg_time = torch.clone(times)
 
-    def next_epoch(self) -> None:
-        if self._is_training:
-            self.cur_epoch += 1
-            self.cur_layer = 0
-
-    def set_is_training(self, is_training: bool) -> None:
-        self._is_training = is_training
-
-    # time unit: ms
-    def get_total_barrier_time(self) -> float:
-        return torch.sum(self.barrier_time).item() * 1000.0
-
-    def get_total_quantization_time(self) -> float:
-        return torch.sum(self.quantization_time).item() * 1000.0
-
-    def get_total_communication_time(self) -> float:
-        return torch.sum(self.communication_time).item() * 1000.0
-
-    def get_total_dequantization_time(self) -> float:
-        return torch.sum(self.dequantization_time).item() * 1000.0
-
-    def get_total_convolution_time(self) -> float:
-        return torch.sum(self.total_covolution_time).item() * 1000.0
-    
-    def get_total_prepare_comm_time(self) -> float:
-        return torch.sum(self.prepare_comm_time).item() * 1000.0
-    
-    def get_total_pre_aggregate_time(self) -> float:
-        return torch.sum(self.pre_aggregate_time).item() * 1000.0
-    
-    def get_total_local_aggregate_time(self) -> float:
-        return torch.sum(self.local_aggregate_time).item() * 1000.0
-    
-    def get_total_remote_aggregate_time(self) -> float:
-        return torch.sum(self.remote_aggregate_time).item() * 1000.0
-    
-    def get_total_training_time(self) -> float:
-        return torch.sum(self.total_training_time).item() * 1000.0
-
-    def print_total_time(self) -> None:
-        # use mpi_reduce to get the average time of all mpi processes
-        total_barrier_time = torch.tensor([self.get_total_barrier_time()])
-        total_quantization_time = torch.tensor([self.get_total_quantization_time()])
-        total_communication_time = torch.tensor([self.get_total_communication_time()])
-        total_dequantization_time = torch.tensor([self.get_total_dequantization_time()])
-        total_prepare_comm_time = torch.tensor([self.get_total_prepare_comm_time()])
-        total_pre_aggregate_time = torch.tensor([self.get_total_pre_aggregate_time()])
-        total_local_aggregate_time = torch.tensor([self.get_total_local_aggregate_time()])
-        total_remote_aggregate_time = torch.tensor([self.get_total_remote_aggregate_time()])
-        total_convolution_time = torch.tensor([self.get_total_convolution_time()])
-        total_training_time = torch.tensor([self.get_total_training_time()])
-        dist.reduce(total_barrier_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_quantization_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_communication_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_dequantization_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_prepare_comm_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_pre_aggregate_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_local_aggregate_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_remote_aggregate_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_convolution_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(total_training_time, 0, op=dist.ReduceOp.SUM)
-
-        rank = dist.get_rank()
-        world_size = dist.get_world_size()
+        # 使用 torch.distributed 汇总结果
+        if dist.is_initialized():
+            dist.reduce(min_time, dst=0, op=dist.ReduceOp.MIN)
+            dist.reduce(max_time, dst=0, op=dist.ReduceOp.MAX)
+            dist.reduce(avg_time, dst=0, op=dist.ReduceOp.SUM)
+            avg_time /= dist.get_world_size()
+        
+        # convert the min_time, max_time, avg_time to back to dict
+        min_time_record, max_time_record, avg_time_record = None, None, None
         if rank == 0:
-            print("total_barrier_time(ms): {}".format(total_barrier_time[0] / float(world_size)))
-            print("total_quantization_time(ms): {}".format(total_quantization_time[0] / float(world_size)))
-            print("total_communication_time(ms): {}".format(total_communication_time[0] / float(world_size)))
-            print("total_dequantization_time(ms): {}".format(total_dequantization_time[0] / float(world_size)))
-            print("total_prepare_comm_time(ms): {}".format(total_prepare_comm_time[0] / float(world_size)))
-            print("total_pre_aggregate_time(ms): {}".format(total_pre_aggregate_time[0] / float(world_size)))
-            print("total_local_aggregate_time(ms): {}".format(total_local_aggregate_time[0] / float(world_size)))
-            print("total_remote_aggregate_time(ms): {}".format(total_remote_aggregate_time[0] / float(world_size)))
-            print("total_convolution_time(ms): {}".format(total_convolution_time[0] / float(world_size)))
-            print("total_training_time(ms): {}".format(total_training_time[0] / float(world_size)))
+            min_time = min_time.tolist()
+            max_time = max_time.tolist()
+            avg_time = avg_time.tolist()
+
+            min_time_record = defaultdict(lambda: defaultdict(list))
+            max_time_record = defaultdict(lambda: defaultdict(list))
+            avg_time_record = defaultdict(lambda: defaultdict(list))
+
+            for module_name, epochs in self.records.items():
+                for epoch, times in epochs.items():
+                    if len(times) == 0:
+                        continue
+                    min_time_record[module_name][epoch] = min_time.pop(0)
+                    max_time_record[module_name][epoch] = max_time.pop(0)
+                    avg_time_record[module_name][epoch] = avg_time.pop(0)
+            
+        return min_time_record, max_time_record, avg_time_record
     
-    # save the time to file
-    def save_time_to_file(self, graph_name, world_size) -> None:
-
-        # convert all time from s to ms
-        self.barrier_time *= 1000.0
-        self.quantization_time *= 1000.0
-        self.communication_time *= 1000.0
-        self.dequantization_time *= 1000.0
-        self.total_covolution_time *= 1000.0
-        self.prepare_comm_time *= 1000.0
-        self.pre_aggregate_time *= 1000.0
-        self.local_aggregate_time *= 1000.0
-        self.remote_aggregate_time *= 1000.0
-        self.total_training_time *= 1000.0
-
-        # use reduce to get the average time of all mpi processes
-        dist.reduce(self.barrier_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.quantization_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.communication_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.dequantization_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.total_covolution_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.prepare_comm_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.pre_aggregate_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.local_aggregate_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.remote_aggregate_time, 0, op=dist.ReduceOp.SUM)
-        dist.reduce(self.total_training_time, 0, op=dist.ReduceOp.SUM)
-
-
-        if dist.get_rank() == 0:
-            # get the average time
-            self.barrier_time /= float(world_size)
-            self.quantization_time /= float(world_size)
-            self.communication_time /= float(world_size)
-            self.dequantization_time /= float(world_size)
-            self.total_covolution_time /= float(world_size)
-            self.prepare_comm_time /= float(world_size)
-            self.pre_aggregate_time /= float(world_size)
-            self.local_aggregate_time /= float(world_size)
-            self.remote_aggregate_time /= float(world_size)
-            self.total_training_time /= float(world_size)
-
-
-            # convert all time to numpy
-            barrier_time = self.barrier_time.numpy()
-            quantization_time = self.quantization_time.numpy()
-            communication_time = self.communication_time.numpy()
-            dequantization_time = self.dequantization_time.numpy()
-            total_covolution_time = self.total_covolution_time.numpy()
-            prepare_comm_time = self.prepare_comm_time.numpy()
-            pre_aggregate_time = self.pre_aggregate_time.numpy()
-            local_aggregate_time = self.local_aggregate_time.numpy()
-            remote_aggregate_time = self.remote_aggregate_time.numpy()
-            total_training_time = self.total_training_time.numpy()
-
-            # save all array to npy file
-            np.save("barrier_time_{}_{}.npy".format(graph_name, world_size), barrier_time)
-            np.save("quantization_time_{}_{}.npy".format(graph_name, world_size), quantization_time)
-            np.save("communication_time_{}_{}.npy".format(graph_name, world_size), communication_time)
-            np.save("dequantization_time_{}_{}.npy".format(graph_name, world_size), dequantization_time)
-            np.save("total_covolution_time_{}_{}.npy".format(graph_name, world_size), total_covolution_time)
-            np.save("prepare_comm_time_{}_{}.npy".format(graph_name, world_size), prepare_comm_time)
-            np.save("pre_aggregate_time_{}_{}.npy".format(graph_name, world_size), pre_aggregate_time)
-            np.save("local_aggregate_time_{}_{}.npy".format(graph_name, world_size), local_aggregate_time)
-            np.save("remote_aggregate_time_{}_{}.npy".format(graph_name, world_size), remote_aggregate_time)
-            np.save("total_training_time_{}_{}.npy".format(graph_name, world_size), total_training_time)
-
-    @staticmethod
-    def print_time(rank, message, time):
+    def save_to_excel(self, file_path):
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        min_time_record, max_time_record, avg_time_record = self.get_stats()
         if rank == 0:
-            print("{}: {}".format(message, time))
+            # get minimum, maximum and average acorss different processes with torch.distributed
+            for (records, name) in [(min_time_record, "min_time"), (max_time_record, "max_time"), (avg_time_record, "avg_time")]:
+                """将耗时记录保存为 Excel 文件，拆分不同值到不同的 sheet"""
+                file_name = file_path + "_" + name + ".xlsx"
+                # 创建一个 Pandas Excel writer 对象
+                with pd.ExcelWriter(file_name, engine='openpyxl') as writer:
+                    # 获取所有迭代号和模块名称
+                    all_iterations = sorted(
+                        {iteration for module_data in records.values() for iteration in module_data.keys()}
+                    )
+                    all_modules = records.keys()
+
+                    num_values = 6  # 根据实际情况调整，如果是 5 个统计值
+
+                    # 遍历每个模块
+                    for value_index in range(num_values):
+                        # 对于每个值，创建一个 sheet
+                        data = []
+
+                        # 填充数据：每个 iteration 对应一个模块的某个值
+                        for iteration in all_iterations:
+                            row = [records[module][iteration][value_index] if len(records[module][iteration]) > value_index else None for module in all_modules]
+                            data.append(row)
+
+                        # 创建 DataFrame 并写入到 Excel 的不同 sheet
+                        df = pd.DataFrame(data, columns=all_modules, index=all_iterations)
+                        sheet_name = f"Layer_{value_index+1}"
+                        df.to_excel(writer, sheet_name=sheet_name)
+
+                print(f"Results saved to {file_name}")
