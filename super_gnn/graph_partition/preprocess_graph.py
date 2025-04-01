@@ -27,6 +27,7 @@ class Graph(object):
         valid_idx: np.ndarray,
         test_idx: np.ndarray,
         is_undirected: bool = False,
+        add_self_loop: bool = False,
     ):
         self.edge_index = edge_index
         self.node_feat = node_feat
@@ -38,6 +39,7 @@ class Graph(object):
         self.valid_idx = valid_idx
         self.test_idx = test_idx
         self.is_undirected = is_undirected
+        self.add_self_loop = add_self_loop
 
     def get_in_degrees(self, local_edges_list, num_local_nodes):
         """
@@ -104,6 +106,11 @@ class Graph(object):
         dst_id = dst_id[not_self_loop_idx]
         original_edge_id = original_edge_id[not_self_loop_idx]
         print("length of src_idx after removing self loop = {}".format(src_id.shape[0]))
+
+        if self.add_self_loop:
+            print("Adding self loop...")
+            src_id = np.concatenate([src_id, np.arange(self.num_nodes)])
+            dst_id = np.concatenate([dst_id, np.arange(self.num_nodes)])
 
         # remove duplicated edges
         print("length of src_idx before removing duplicated edges = {}".format(src_id.shape[0]))
@@ -463,6 +470,47 @@ class DataLoader(object):
         graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, test_idx)
         return graph
 
+    @staticmethod
+    def load_IGB260M(raw_dir: str) -> Graph:
+        """
+        to load IGB260M dataset, return the loaded graph and node labels
+        """
+        print("start loading data.")
+        num_nodes = 269346174
+        edge_path = os.path.join(raw_dir, 'processed', 'paper__cites__paper', 'edge_index.npy')
+        edge_index = np.load(edge_path).T.astype(np.int64)
+        print("load edge index successfully.")
+        label_path = os.path.join(raw_dir, 'processed', 'paper', 'node_label_19.npy')
+        # node_label = np.load(label_path).astype(np.int64)
+        node_label = np.memmap(label_path, dtype='float32', mode='r',  shape=(num_nodes))
+        node_label = np.array(node_label)
+        print("load node labels successfully.")
+        num_labeled_idx = 227130858
+        num_train = int(num_labeled_idx * 0.6)
+        num_val   = int(num_labeled_idx * 0.2)
+
+        train_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        val_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        train_mask[:num_train] = True
+        val_mask[num_train:num_train + num_val] = True
+        test_mask[num_train + num_val:num_labeled_idx] = True
+
+        train_idx = train_mask.nonzero().squeeze().numpy()
+        valid_idx = val_mask.nonzero().squeeze().numpy()
+        test_idx = test_mask.nonzero().squeeze().numpy()
+        print("generate training mask successfully.")
+
+        feat_path = os.path.join(raw_dir, 'processed', 'paper', 'node_feat.npy')
+        # node_feat = np.load(feat_path).astype(np.float32)
+        node_feat = np.memmap(feat_path, dtype='float32', mode='r',  shape=(num_nodes, 1024))
+        node_feat = np.array(node_feat)
+        print("load node features successfully.")
+        
+        # TODO - need to check the format of edge_index
+        graph = Graph(edge_index, node_feat, num_nodes, node_label, train_idx, valid_idx, test_idx)
+        return graph
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -472,6 +520,7 @@ if __name__ == "__main__":
     parser.add_argument("--raw_dir", type=str, default="./", help="The path of raw dataset directory.")
     parser.add_argument("--dataset", type=str, help="The name of input dataset.")
     parser.add_argument("--is_undirected", action="store_true", help="Whether to convert the graph to undirected.")
+    parser.add_argument("--add_self_loop", action="store_true", help="Whether to add self loop to the graph.")
     args = parser.parse_args()
     processed_dir = args.processed_dir
     raw_dir = args.raw_dir
@@ -490,6 +539,8 @@ if __name__ == "__main__":
         graph = DataLoader.load_reddit_dataset(raw_dir)
     elif dataset == "proteins":
         graph = DataLoader.load_proteins_dataset(raw_dir)
+    elif dataset == 'IGB260M':
+        graph = DataLoader.load_IGB260M(raw_dir)
     else:
         raise ValueError("Invalid dataset name")
 
