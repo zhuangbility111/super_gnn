@@ -28,14 +28,20 @@ class TimeRecorder(object):
                 self.module_name = module_name
                 self.start_time = None
                 self.is_record = is_record
+                self.start_event = torch.cuda.Event(enable_timing=True)
+                self.end_event = torch.cuda.Event(enable_timing=True)
 
             def __enter__(self):
                 if self.outer.mode == "training":  # 仅在模式为 'training' 时记录
+                    # torch.cuda.synchronize()  # 同步 GPU
+                    self.start_event.record()
                     self.start_time = time.perf_counter()
 
             def __exit__(self, exc_type, exc_val, exc_tb):
                 if self.outer.mode == "training" and self.start_time is not None:
-                    elapsed_time = (time.perf_counter() - self.start_time) * 1000.0  # 转换为毫秒
+                    self.end_event.record()
+                    torch.cuda.synchronize()  # 同步 GPU
+                    elapsed_time = torch.cuda.Event.elapsed_time(self.start_event, self.end_event)  # 使用 CUDA 事件计算耗时
                     current_epoch = self.outer.current_epoch
                     if self.is_record:
                         self.outer.records[self.module_name][current_epoch].append(elapsed_time)

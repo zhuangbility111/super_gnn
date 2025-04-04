@@ -18,6 +18,7 @@ class DistributedGraph(object):
         comm_splits: CommSplits,
         comm_buf: CommBuffer,
         comm_buf_for_quantization: Optional[CommBufferForQuantization],
+        device: str = "cpu",
     ) -> None:
         self.local_adj_t = local_adj_t
         self.remote_adj_t = remote_adj_t
@@ -32,6 +33,13 @@ class DistributedGraph(object):
         self.comm_splits = comm_splits
         self.comm_buf = comm_buf
         self.comm_buf_for_quantization = comm_buf_for_quantization
+        self.device = device
+
+        self.local_adj_t = self.local_adj_t.to(device)
+        self.remote_adj_t = self.remote_adj_t.to(device)
+        self.idx_nodes_send_to_others = self.idx_nodes_send_to_others.to(device)
+        self.in_degrees = self.in_degrees.to(device)
+
     
     def get_in_degrees(self):
         local_edges_list = self.local_adj_t.coo()
@@ -60,6 +68,7 @@ class DistributedGraphForPre(object):
         comm_splits: CommSplits,
         comm_buf: CommBuffer,
         comm_buf_for_quantization: Optional[CommBufferForQuantization],
+        device: str = "cpu",
     ) -> None:
         self.local_adj_t = local_adj_t
         self.adj_t_pre_post_aggr_from = adj_t_pre_post_aggr_from
@@ -73,6 +82,13 @@ class DistributedGraphForPre(object):
         self.comm_splits = comm_splits
         self.comm_buf = comm_buf
         self.comm_buf_for_quantization = comm_buf_for_quantization
+
+        self.device = device
+        self.local_adj_t = self.local_adj_t.to(device)
+        self.adj_t_pre_post_aggr_from = self.adj_t_pre_post_aggr_from.to(device)
+        self.adj_t_pre_post_aggr_to = self.adj_t_pre_post_aggr_to.to(device)
+
+        self.in_degrees = self.in_degrees.to(device)
     
     def get_in_degrees(self):
         local_edges_list = self.local_adj_t.coo()

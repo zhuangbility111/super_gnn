@@ -1,7 +1,8 @@
 import torch
-from torch_scatter import segment_csr
+# from torch_scatter import segment_csr
 from torch_sparse import SparseTensor
-from supergnn_ops import spmm
+from super_gnn.time_recorder import TimeRecorder
+# from supergnn_ops import spmm
 import time
 
 
@@ -58,13 +59,13 @@ def SPMM_forward_cpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) 
     return None
 
 def SPMM_forward_gpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-    sparse_matrix = src.to_torch_sparse_coo_tensor()
+    sparse_matrix = src.to_torch_sparse_csr_tensor()
     result = torch.sparse.mm(sparse_matrix, other)
-    out.copy_(result)
+    out += result
     return None
 
 def SPMM_forward(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-    if src.device.type == 'cuda' and other.device.type == 'cuda':
+    if other.device.type == 'cuda':
         return SPMM_forward_gpu(src, other, out)
     return SPMM_forward_cpu(src, other, out)
 
@@ -86,14 +87,14 @@ def SPMM_backward_gpu(src: SparseTensor, other: torch.Tensor, out: torch.Tensor)
     row_T = src.storage.row_T()
     value_T = src.storage.value_T()
     sparse_matrix = torch.sparse_csr_tensor(
-        colptr, row_T, value_T, device=src.device, dtype=other.dtype
+        colptr, row_T, value_T, size=(colptr.shape[0]-1, other.shape[0]), device=other.device, dtype=other.dtype
     )
     result = torch.sparse.mm(sparse_matrix, other)
-    out.copy_(result)
+    out += result
     return None
 
 def SPMM_backward(src: SparseTensor, other: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-    if src.device.type == 'cuda' and other.device.type == 'cuda':
+    if other.device.type == 'cuda':
         return SPMM_backward_gpu(src, other, out)
     return SPMM_backward_cpu(src, other, out)
 

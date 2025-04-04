@@ -1,0 +1,16 @@
+input_dir: "/home/chenzhuang/super_gnn/data/ogbn_arxiv/"
+graph_name: "ogbn_arxiv"
+model_name: "sage"
+# model_name: "gcn"
+in_channels: 128
+hidden_channels: 128
+out_channels: 40
+num_layers: 3
+dropout: 0.3
+lr: 0.01
+weight_decay: 0.0005
+num_epochs: 200
+random_seed: 0
+is_async: false
+assign_period: 50
+norm_type: "LayerNorm"

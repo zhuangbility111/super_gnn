@@ -79,7 +79,22 @@ class DataProcessor(object):
         ]
         recv_num_nodes = [torch.zeros(1, dtype=torch.int64) for i in range(world_size)]
         if world_size != 1:
-            dist.all_to_all(recv_num_nodes, send_num_nodes)
+            from super_gnn.communicator import Communicator
+            group = Communicator.ctx.cpu_group if torch.cuda.is_available() else None
+            # create the list for input_split and output_split
+            send_splits = [1 for _ in range(world_size)]
+            recv_splits = [1 for _ in range(world_size)]
+            send_buffer = torch.cat(send_num_nodes, dim=0)
+            recv_buffer = torch.zeros_like(send_buffer)
+            dist.all_to_all_single(
+                recv_buffer,
+                send_buffer,
+                recv_splits,
+                send_splits,
+                group=group,
+            )
+
+            recv_num_nodes = torch.split(recv_buffer, recv_splits)
         num_local_nodes_required_by_other = recv_num_nodes
         num_local_nodes_required_by_other = torch.cat(num_local_nodes_required_by_other, dim=0)
 
@@ -96,9 +111,22 @@ class DataProcessor(object):
             for i in range(world_size)
         ]
         if world_size != 1:
-            dist.all_to_all(recv_nodes_list, send_nodes_list)
+            from super_gnn.communicator import Communicator
+            group = Communicator.ctx.cpu_group if torch.cuda.is_available() else None
+            send_splits = [range_of_remote_nodes_on_local_graph[i + 1] - range_of_remote_nodes_on_local_graph[i] for i in range(world_size)]
+            recv_splits = [int(num_local_nodes_required_by_other[i].item()) for i in range(world_size)]
+            send_buffer = torch.cat(send_nodes_list, dim=0)
+            recv_buffer = torch.zeros(sum(recv_splits), dtype=torch.int64)
+            dist.all_to_all_single(
+                recv_buffer,
+                send_buffer,
+                recv_splits,
+                send_splits,
+                group=group,
+            )
+            recv_nodes_list = torch.split(recv_buffer, recv_splits)
         local_node_idx_begin = local_nodes_list[0][0]
-        local_nodes_required_by_other = [i - local_node_idx_begin for i in recv_nodes_list]
+        local_nodes_required_by_other = [recv_nodes_list[i] - local_node_idx_begin for i in range(world_size)]
         local_nodes_required_by_other = torch.cat(local_nodes_required_by_other, dim=0)
         return local_nodes_required_by_other, num_local_nodes_required_by_other
 
@@ -373,11 +401,16 @@ class DataProcessorForPreAggresive(object):
 
         if world_size != 1:
             # dist.all_to_all(num_remote_edges_pre_post_aggr_to, num_remote_edges_pre_post_aggr_from)
+            group = None
+            if torch.cuda.is_available():
+                from super_gnn.communicator import Communicator
+                group = Communicator.ctx.cpu_group
             dist.all_to_all_single(
                 num_remote_edges_recv,
                 num_remote_edges_send,
                 recv_splits,
                 send_splits,
+                group=group,
             )
 
         return num_remote_edges_send, num_remote_edges_recv
@@ -402,11 +435,16 @@ class DataProcessorForPreAggresive(object):
 
         if world_size != 1:
             # dist.all_to_all(remote_edges_pre_post_aggr_to, remote_edges_pre_post_aggr_from)
+            group = None
+            if torch.cuda.is_available():
+                from super_gnn.communicator import Communicator
+                group = Communicator.ctx.cpu_group
             dist.all_to_all_single(
                 remote_edges_recv_from_graph_exchange,
                 remote_edges_sent_for_graph_exchange,
                 recv_splits,
                 send_splits,
+                group=group,
             )
 
         remote_edges_recv_from_graph_exchange = torch.split(

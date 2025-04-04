@@ -86,8 +86,12 @@ def test_step(model, data, is_label_augment):
     predict_result = torch.tensor(predict_result)
     loss_result = torch.tensor(loss_result)
     if dist.get_world_size() > 1:
-        dist.all_reduce(predict_result, op=dist.ReduceOp.SUM)
-        dist.all_reduce(loss_result, op=dist.ReduceOp.SUM)
+        group = None
+        if torch.cuda.is_available():
+            group = Communicator.ctx.cpu_group
+            torch.cuda.synchronize()
+        dist.all_reduce(predict_result, op=dist.ReduceOp.SUM, group=group)
+        dist.all_reduce(loss_result, op=dist.ReduceOp.SUM, group=group)
 
     train_acc = float(predict_result[0] / predict_result[1])
     val_acc = float(predict_result[2] / predict_result[3])
@@ -116,7 +120,8 @@ def train(model, data, optimizer, num_epochs, num_bits, is_label_augment, checkp
     best_val_loss = float("inf")
     best_test_acc = 0.0
 
-    num_train_nodes = torch.tensor([data["nodes_train_masks"].size(0)], dtype=torch.int64)
+    device = torch.device("cuda", rank) if torch.cuda.is_available() else torch.device("cpu")
+    num_train_nodes = torch.tensor([data["nodes_train_masks"].size(0)], dtype=torch.int64, device=device)
     dist.all_reduce(num_train_nodes, op=dist.ReduceOp.SUM)
     num_train_nodes = float(num_train_nodes.item())
     num_train_nodes *= (1 - label_rate)
@@ -132,8 +137,12 @@ def train(model, data, optimizer, num_epochs, num_bits, is_label_augment, checkp
     dist.barrier()
     for epoch in range(num_epochs):
         # dist.barrier()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         train_begin = time.perf_counter()
         train_loss = train_step(model, data, optimizer, epoch, num_train_nodes, label_rate)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         train_end = time.perf_counter()
         train_acc, val_acc, test_acc, val_loss = test_step(model, data, is_label_augment)
         

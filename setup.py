@@ -1,7 +1,17 @@
 import os
+import subprocess
 from setuptools import setup, find_packages
+from setuptools.command.install import install
 
 ops_setup_path = os.path.join(os.path.dirname(__file__), 'supergnn', 'ops', 'setup.py')
+
+class CustomInstallCommand(install):
+    def run(self):
+        # Run the original install command
+        super().run()
+        # Run the setup.py in the subdirectory
+        if os.path.exists(ops_setup_path):
+            subprocess.check_call(['python', ops_setup_path, 'install'])
 
 setup(
     name='super_gnn',
@@ -12,8 +22,8 @@ setup(
         'requests',
         'numpy',
     ],
-    setup_requires=[
-        f'file://{ops_setup_path}',
-    ],
     description='a distributed gnns training system for cpu supercomputers',
+    cmdclass={
+        'install': CustomInstallCommand,
+    },
 )

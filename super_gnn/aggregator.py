@@ -59,7 +59,7 @@ class Aggregator(torch.autograd.Function):
                     )
 
             with TimeRecorder.ctx.time_block("local_aggregation"):
-                out = torch.zeros([graph.local_adj_t.sparse_size(0), local_nodes_feat.size(-1)], dtype=torch.float32)
+                out = torch.zeros([graph.local_adj_t.sparse_size(0), local_nodes_feat.size(-1)], dtype=torch.float32, device=local_nodes_feat.device)
                 # aggregate message from local nodes
                 # out = SPMM_forward(graph.local_adj_t, local_nodes_feat, out)
                 SPMM_forward(graph.local_adj_t, local_nodes_feat, out)
@@ -143,7 +143,7 @@ class Aggregator(torch.autograd.Function):
             with TimeRecorder.ctx.time_block("local_aggregation"):
                 # scatter gradient to local nodes
                 local_nodes_grad = torch.zeros(
-                    [graph.local_adj_t.sparse_size(-1), local_out_grad.size(-1)], dtype=torch.float32
+                    [graph.local_adj_t.sparse_size(-1), local_out_grad.size(-1)], dtype=torch.float32, device=local_out_grad.device
                 )
                 SPMM_backward(graph.local_adj_t, local_out_grad, local_nodes_grad)
 

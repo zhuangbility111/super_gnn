@@ -45,27 +45,27 @@ def load_graph_structures(input_dir, graph_name, rank):
     )
 
 
-def load_nodes_labels(input_dir, graph_name, rank):
+def load_nodes_labels(input_dir, graph_name, rank, device):
     # load labels of vertices on subgraph
     nodes_label_list = np.load(
         os.path.join(input_dir, "p{:0>3d}-{}_nodes_label.npy".format(rank, graph_name))
     )
-    return torch.from_numpy(nodes_label_list)
+    return torch.from_numpy(nodes_label_list).to(device)
 
 
-def load_nodes_features(input_dir, graph_name, rank):
+def load_nodes_features(input_dir, graph_name, rank, device):
     # load features of vertices on subgraph
     nodes_feat_list = np.load(os.path.join(input_dir, "p{:0>3d}-{}_nodes_feat.npy".format(rank, graph_name)))
     if nodes_feat_list.dtype == np.float16:
         nodes_feat_list = nodes_feat_list.astype(np.float32)
-    return torch.from_numpy(nodes_feat_list)
+    return torch.from_numpy(nodes_feat_list).to(device)
 
 
-def load_dataset_mask(input_dir, graph_name, rank):
+def load_dataset_mask(input_dir, graph_name, rank, device):
     train_idx = np.load(os.path.join(input_dir, "p{:0>3d}-{}_nodes_train_idx.npy".format(rank, graph_name)))
     valid_idx = np.load(os.path.join(input_dir, "p{:0>3d}-{}_nodes_valid_idx.npy".format(rank, graph_name)))
     test_idx = np.load(os.path.join(input_dir, "p{:0>3d}-{}_nodes_test_idx.npy".format(rank, graph_name)))
-    return torch.from_numpy(train_idx), torch.from_numpy(valid_idx), torch.from_numpy(test_idx)
+    return torch.from_numpy(train_idx).to(device), torch.from_numpy(valid_idx).to(device), torch.from_numpy(test_idx).to(device)
 
 
 def get_distributed_graph(
@@ -77,6 +77,7 @@ def get_distributed_graph(
     max_feat_len: int,
     world_size: int,
     bits: int,
+    device: str = "cpu",
 ):
     in_degrees = DataProcessor.get_in_degrees(local_edges_list, remote_edges_list, num_local_nodes)
 
@@ -108,11 +109,11 @@ def get_distributed_graph(
     )
 
     comm_splits = CommSplits(remote_nodes_num_from_each_subgraph.tolist(), num_local_nodes_required_by_other.tolist(), world_size, bits)
-    comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
+    comm_buf = CommBuffer(comm_splits, max_feat_len, bits, device=device)
     comm_buf_for_quantization = None
 
     if bits == 2 or bits == 4 or bits == 8:
-        comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
+        comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits, device=device)
 
     distributed_graph = DistributedGraph(
         local_adj_t,
@@ -124,6 +125,7 @@ def get_distributed_graph(
         comm_splits,
         comm_buf,
         comm_buf_for_quantization,
+        device
     )
 
     return distributed_graph
@@ -138,6 +140,7 @@ def get_distributed_graph_for_pre_aggressive(
     rank,
     world_size,
     bits,
+    device: str = "cpu",
 ):
     in_degrees = DataProcessor.get_in_degrees(local_edges_list, remote_edges_list, num_local_nodes)
 
@@ -179,14 +182,14 @@ def get_distributed_graph_for_pre_aggressive(
         return (send_volume, recv_volume)
 
     comm_splits = CommSplits(pre_post_aggr_from_splits, pre_post_aggr_to_splits, world_size, bits)
-    comm_buf = CommBuffer(comm_splits, max_feat_len, bits)
+    comm_buf = CommBuffer(comm_splits, max_feat_len, bits, device=device)
     comm_buf_for_quantization = None
 
     send_volume, recv_volume = check_comm_volume(pre_post_aggr_from_splits, pre_post_aggr_to_splits)
     print("rank = {}, send_volume = {}, recv_volume = {}".format(rank, send_volume, recv_volume))
 
     if bits == 2 or bits == 4 or bits == 8:
-        comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits)
+        comm_buf_for_quantization = CommBufferForQuantization(comm_splits, max_feat_len, bits, device=device)
 
     distributed_graph = DistributedGraphForPre(
         local_adj_t,
@@ -198,6 +201,7 @@ def get_distributed_graph_for_pre_aggressive(
         comm_splits,
         comm_buf,
         comm_buf_for_quantization,
+        device=device,
     )
 
     # print("graph.local_adj_t = {}".format(distributed_graph.local_adj_t))
@@ -236,6 +240,8 @@ def load_data(config):
         num_local_nodes,
     ) = load_graph_structures(input_dir, graph_name, rank)
 
+    device = torch.device("cuda", rank) if torch.cuda.is_available() else torch.device("cpu")
+
     if is_pre_delay:
         # create vertex cover finder for deciding pre or post aggregation
         vertex_cover_file_list = [ os.path.join(input_dir, "p{:0>3d}-{}_to_p{:0>3d}_vertex_cover_set.npy".format(rank, graph_name, dst_rank)) for dst_rank in range(world_size)]
@@ -251,6 +257,7 @@ def load_data(config):
             rank,
             world_size,
             num_bits,
+            device=device,
         )
     else:
         distributed_graph = get_distributed_graph(
@@ -262,11 +269,12 @@ def load_data(config):
             max_feat_len,
             world_size,
             num_bits,
+            device=device,
         )
 
-    nodes_labels_list = load_nodes_labels(input_dir, graph_name, rank)
-    nodes_features_list = load_nodes_features(input_dir, graph_name, rank)
-    train_mask, valid_mask, test_mask = load_dataset_mask(input_dir, graph_name, rank)
+    nodes_labels_list = load_nodes_labels(input_dir, graph_name, rank, device=device)
+    nodes_features_list = load_nodes_features(input_dir, graph_name, rank, device=device)
+    train_mask, valid_mask, test_mask = load_dataset_mask(input_dir, graph_name, rank, device=device)
 
     data["graph"] = distributed_graph
     data["nodes_features"] = nodes_features_list

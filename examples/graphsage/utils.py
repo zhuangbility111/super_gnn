@@ -45,9 +45,15 @@ def create_model_and_optimizer(config: dict):
 
     model.reset_parameters()
     if dist.get_world_size() > 1:
+        if torch.cuda.is_available():
+            model.to(torch.device("cuda", dist.get_rank()))
+            print("move model to GPU {}".format(torch.device("cuda", dist.get_rank())))
         # wrap model with ddp
-        model = torch.nn.parallel.DistributedDataParallel(model)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[dist.get_rank()])
         model.register_comm_hook(state=None, hook=allreduce_hook)
+    else:
+        if torch.cuda.is_available():
+            model.to(torch.device("cuda"))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"], weight_decay=config["weight_decay"])
 

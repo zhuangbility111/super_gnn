@@ -18,72 +18,27 @@ def check_cuda_support():
         return False
 
 
-def check_cpu_support(extra_compile_args, extra_link_args, source_files):
-    try:
-        result = subprocess.run(["lscpu"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-        if "avx512f" in result.stdout:
-            extra_compile_args.extend(
-                [
-                    "-fopenmp",
-                    "-mavx512f",
-                    "-mavx512cd",
-                    "-mavx512bw",
-                    "-mavx512dq",
-                    "-mavx512vl",
-                    "-mavx512ifma",
-                    "-mavx512vbmi",
-                ]
-            )
-            extra_link_args.extend(
-                [
-                    "-fopenmp",
-                    "-mavx512f",
-                    "-mavx512cd",
-                    "-mavx512bw",
-                    "-mavx512dq",
-                    "-mavx512vl",
-                    "-mavx512ifma",
-                    "-mavx512vbmi",
-                ]
-            )
-            source_files.extend(glob.glob("csrc/*_x86.cpp"))
-        elif "sve" in result.stdout:
-            extra_compile_args.extend(["-fopenmp", "-Nlibomp", "-Ofast"])
-            extra_link_args.extend(["-fopenmp", "-Nlibomp", "-Ofast"])
-            source_files.extend(glob.glob("csrc/*_arm.cpp"))
-        else:
-            print("Warning: CPU does not support AVX512 or SVE")
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-
 def get_extensions():
-    extra_compile_args = ["-O3"]
+    cuda_compile_args = ["-O3", "-DUSE_CUDA", "-x", "cu", "--expt-extended-lambda", "-std=c++17"]
     extra_link_args = []
-    source_files = []
+    cuda_source_files = []
 
     if check_cuda_support():
-        extra_compile_args += ["-DUSE_CUDA", "-x", "cu", "--expt-extended-lambda", "-std=c++14"]
-        extra_link_args += ["-lcudart", "-lcuda"]
-        source_files += glob.glob("csrc/*.cu")
-        extension_type = cpp_extension.CUDAExtension
+        cuda_source_files += glob.glob("csrc/*.cu")
+        cuda_source_files.extend(["csrc/ops.cpp"])
     else:
-        source_files += ["csrc/utils.cpp", "csrc/spmm.cpp", "csrc/ops.cpp", "csrc/vertex_cover.cpp"]
-        check_cpu_support(extra_compile_args, extra_link_args, source_files)
-        extension_type = cpp_extension.CppExtension
+        raise RuntimeError("CUDA is not supported or nvcc is not installed.")
 
-    extensions = []
-    extensions.append(
-        extension_type(
-            "supergnn_ops",
-            source_files,
+    extensions = [
+        cpp_extension.CUDAExtension(
+            "supergnn_ops",  # Single module for CUDA
+            cuda_source_files,
             include_dirs=["csrc/"],
-            extra_compile_args=extra_compile_args,
+            extra_compile_args={"nvcc": cuda_compile_args},
             extra_link_args=extra_link_args,
         )
-    )
+    ]
+
     return extensions
 
 

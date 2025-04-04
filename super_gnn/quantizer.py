@@ -79,14 +79,40 @@ class Quantizer_for_all_procs(object):
         Quantizer_for_all_procs.ctx = self
 
     def quantize_fp32_to_intX(self, data_fp32, data_int8, quantized_params, quantized_work_range_per_proc):
-        supergnn_ops.quantize_tensor_for_all_procs(data_fp32, data_int8, quantized_params, 
-                                                       quantized_work_range_per_proc, 
-                                                       self.world_size, self.num_bits)
+        if torch.cuda.is_available(): # GPU, need to quantize the params outside the kernel
+            zero_point = torch.min(data_fp32, dim=1)[0]
+            scale = (torch.max(data_fp32, dim=1)[0] - zero_point) / (2**self.num_bits - 1)
+            scale = torch.where(scale == 0, torch.tensor(1.0, device=scale.device), scale)
+            quantized_params[:, 0] = zero_point
+            quantized_params[:, 1] = scale
+
+            supergnn_ops.quantize_tensor_for_all_procs_cuda(
+                data_fp32, data_int8,
+                quantized_params, 
+                quantized_work_range_per_proc,
+                self.world_size,
+                self.num_bits,
+            )
+        
+        else: # CPU, calculate the quantization params inside the kernel
+            supergnn_ops.quantize_tensor_for_all_procs(data_fp32, data_int8, quantized_params, 
+                                                        quantized_work_range_per_proc, 
+                                                        self.world_size, self.num_bits)
 
     def dequantize_intX_to_fp32(self, data_int8, data_fp32, quantized_params, dequantized_work_range_per_proc):
-        supergnn_ops.dequantize_tensor_for_all_procs(data_int8, data_fp32, quantized_params, 
-                                                         dequantized_work_range_per_proc, 
-                                                         self.world_size, self.num_bits)
+        if torch.cuda.is_available():
+            supergnn_ops.dequantize_tensor_for_all_procs_cuda(
+                data_int8, 
+                data_fp32, 
+                quantized_params, 
+                dequantized_work_range_per_proc, 
+                self.world_size, 
+                self.num_bits
+            )
+        else:
+            supergnn_ops.dequantize_tensor_for_all_procs(data_int8, data_fp32, quantized_params, 
+                                                            dequantized_work_range_per_proc, 
+                                                            self.world_size, self.num_bits)
     
     def get_quantized_splits(self, num_comm_nodes):
         return math.ceil(num_comm_nodes / float(8 / self.num_bits))

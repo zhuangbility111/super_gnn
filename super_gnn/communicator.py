@@ -36,6 +36,18 @@ class Communicator(object):
                 torch.set_num_threads(12)
             print("num_threads: ", torch.get_num_threads())
         # abci
+        elif torch.cuda.is_available() and torch.distributed.is_nccl_available():
+            # num_gpus = torch.cuda.device_count()
+            num_gpus = int(os.environ.get("WORLD_SIZE", -1))
+            local_rank = int(os.environ.get("LOCAL_RANK", -1))
+            rank = int(os.environ.get("RANK", -1))
+            print("use nccl backend for torch.distributed package.")
+            dist.init_process_group(backend="nccl", world_size=num_gpus, rank=rank)
+            torch.cuda.set_device(local_rank)
+            print(f"Rank: {rank}, World Size: {num_gpus}, Local Rank: {local_rank}, gpu id: {torch.cuda.current_device()}")
+
+            # Create a group for CPU communication
+            self.cpu_group = dist.new_group(backend="gloo")
         else:
             # backend with torch_ccl
             import torch_ccl
