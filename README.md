@@ -1,3 +1,5 @@
+# SuperGNN: Scaling Large-scale GNN Training to Thousands of Processors on CPU-based Supercomputers (ICS'25)
+This code is for paper **Scaling Large-scale GNN Training to Thousands of Processors on CPU-based Supercomputers** accepted by ICS 2025. Link of Paper: https://dl.acm.org/doi/10.1145/3721145.3730422
 ## Prerequisite
 * PyTorch (version >= 1.10.0)
 * numpy
